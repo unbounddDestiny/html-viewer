@@ -154,11 +154,9 @@
         const themeToggleBtn = document.getElementById('theme-toggle');
 
         // State Variables
-        let zipData = null; 
         let filesMap = {}; // path -> File entry
         let sortedFilePaths = [];
         let activePath = null;
-        let currentBlobUrl = null;
 
         // Initialize App
         async function init() {
@@ -208,7 +206,6 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            // Cache file in IndexedDB for fast reloads
             try {
                 await localforage.setItem('cached_zip', file);
             } catch (err) {
@@ -234,7 +231,6 @@
 
                 renderFileList();
 
-                // Restore last viewed file if it exists in the new/cached zip
                 const lastPath = localStorage.getItem('last_active_path');
                 if (lastPath && filesMap[lastPath]) {
                     await selectFile(lastPath, true);
@@ -248,7 +244,7 @@
             }
         }
 
-        // Render File List with sorting/filtering
+        // Render File List with Natural Alphanumeric Sorting
         function renderFileList() {
             const query = searchInput.value.toLowerCase();
             const sortOrder = sortSelect.value;
@@ -258,10 +254,14 @@
                 return filename.toLowerCase().includes(query);
             });
 
+            // NATURAL SORTING: Handles numerical orders correctly (1, 2, 10, 20) instead of raw alphabetical order
             filtered.sort((a, b) => {
-                const nameA = a.split('/').pop().toLowerCase();
-                const nameB = b.split('/').pop().toLowerCase();
-                return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+                const nameA = a.split('/').pop();
+                const nameB = b.split('/').pop();
+                
+                return sortOrder === 'asc' 
+                    ? nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
+                    : nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
             });
 
             if (filtered.length === 0) {
@@ -288,7 +288,6 @@
 
                 button.addEventListener('click', () => {
                     selectFile(path);
-                    // On small screens/tablets, collapse sidebar automatically on file select
                     if (window.innerWidth < 768) {
                         toggleSidebar();
                     }
@@ -303,41 +302,45 @@
             activePath = path;
             localStorage.setItem('last_active_path', path);
 
-            // Update Active Class on Sidebar items
             renderFileList();
 
             const entry = filesMap[path];
             if (!entry) return;
 
-            // Revoke prior URL to prevent memory leaks
-            if (currentBlobUrl) {
-                URL.revokeObjectURL(currentBlobUrl);
-            }
-
-            const content = await entry.async('blob');
-            currentBlobUrl = URL.createObjectURL(new Blob([content], { type: 'text/html' }));
+            // Fetch raw HTML text instead of a binary blob
+            const htmlContent = await entry.async('string');
 
             emptyState.classList.add('hidden');
             viewerFrame.classList.remove('hidden');
-            viewerFrame.src = currentBlobUrl;
 
-            // Restore Scroll Position Hook
+            // FIX: Use srcdoc to write code strings inline directly. 
+            // This stops iOS from un-rendering or clipping base64 images inside the sandboxed view frame.
+            viewerFrame.srcdoc = htmlContent;
+
+            // Reliable scroll hooks using the dynamic content framework
             viewerFrame.onload = () => {
                 const frameWindow = viewerFrame.contentWindow;
-                const frameDoc = viewerFrame.contentDocument || frameWindow.document;
-
+                
                 if (restoreScroll) {
                     const savedScroll = localStorage.getItem(`scroll_${path}`);
                     if (savedScroll) {
-                        frameWindow.scrollTo(0, parseFloat(savedScroll));
+                        // Short timeout gives iOS enough time to compute the document height with images loaded
+                        setTimeout(() => {
+                            frameWindow.scrollTo(0, parseFloat(savedScroll));
+                        }, 80);
                     }
                 }
 
-                // Attach scroll tracker inside iframe
-                frameWindow.addEventListener('scroll', () => {
-                    localStorage.setItem(`scroll_${path}`, frameWindow.scrollY);
-                });
+                // Listen for scroll shifts to cache placement details
+                frameWindow.removeEventListener('scroll', handleScrollEvent);
+                frameWindow.addEventListener('scroll', handleScrollEvent);
             };
+        }
+
+        function handleScrollEvent(e) {
+            if (activePath) {
+                localStorage.setItem(`scroll_${activePath}`, e.target.defaultView.scrollY);
+            }
         }
 
         // Event Listeners for Search & Sorting
