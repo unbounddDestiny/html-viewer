@@ -74,7 +74,7 @@
         .bg-accent:hover { background-color: var(--accent-hover); }
         .border-theme { border-color: var(--border-color); }
 
-        /* Custom Scrollbars for Lofi vibe */
+        /* Custom Scrollbars */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -90,7 +90,7 @@
 </head>
 <body class="h-screen w-screen flex flex-col overflow-hidden">
 
-    <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-10">
+    <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30">
         <div class="flex items-center space-x-3">
             <button id="toggle-nav" class="p-2 rounded bg-sidebar border border-theme active:scale-95 transition-transform" title="Toggle Navigation">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -111,7 +111,7 @@
 
     <div class="flex-1 flex relative overflow-hidden">
         
-        <aside id="sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transform -translate-x-full transition-transform duration-300 md:relative md:translate-x-0 flex flex-col">
+        <aside id="sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transform transition-transform duration-300 flex flex-col md:static md:translate-x-0">
             <div class="p-3 border-b border-theme space-y-2">
                 <input type="text" id="search-input" placeholder="Search files..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)]">
                 <div class="flex justify-between items-center text-xs">
@@ -128,10 +128,10 @@
             </div>
         </aside>
 
-        <div id="sidebar-overlay" class="absolute inset-0 bg-black/40 z-10 hidden md:hidden"></div>
+        <div id="sidebar-overlay" class="absolute inset-0 bg-black/40 z-10 hidden"></div>
 
         <main class="flex-1 flex flex-col bg-stone-100 relative">
-            <iframe id="viewer-frame" class="w-full h-full border-none bg-white hidden" sandbox="allow-scripts allow-same-origin"></iframe>
+            <iframe id="viewer-frame" class="w-full h-full border-none bg-white hidden"></iframe>
             <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
                 <div class="text-5xl mb-4">🍵</div>
                 <h2 class="text-xl font-semibold mb-1">Your bookshelf is empty</h2>
@@ -154,12 +154,22 @@
         const themeToggleBtn = document.getElementById('theme-toggle');
 
         // State Variables
-        let filesMap = {}; // path -> File entry
+        let filesMap = {}; 
         let sortedFilePaths = [];
         let activePath = null;
+        let isSidebarOpen = true; // Match desktop initial state
 
         // Initialize App
         async function init() {
+            // Setup responsive initial sidebar state
+            if (window.innerWidth < 768) {
+                isSidebarOpen = false;
+                sidebar.classList.add('-translate-x-full');
+            } else {
+                isSidebarOpen = true;
+                sidebar.classList.remove('-translate-x-full');
+            }
+
             // Setup Theme
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme) {
@@ -189,13 +199,16 @@
 
         // Toggle Sidebar
         function toggleSidebar() {
-            const isOpen = !sidebar.classList.contains('-translate-x-full');
-            if (isOpen) {
+            if (isSidebarOpen) {
                 sidebar.classList.add('-translate-x-full');
                 sidebarOverlay.classList.add('hidden');
+                isSidebarOpen = false;
             } else {
                 sidebar.classList.remove('-translate-x-full');
-                sidebarOverlay.classList.remove('hidden');
+                if (window.innerWidth < 768) {
+                    sidebarOverlay.classList.remove('hidden');
+                }
+                isSidebarOpen = true;
             }
         }
         toggleNavBtn.addEventListener('click', toggleSidebar);
@@ -254,7 +267,7 @@
                 return filename.toLowerCase().includes(query);
             });
 
-            // NATURAL SORTING: Handles numerical orders correctly (1, 2, 10, 20) instead of raw alphabetical order
+            // NATURAL SORTING: Handles 1, 2, 10, 20 correctly
             filtered.sort((a, b) => {
                 const nameA = a.split('/').pop();
                 const nameB = b.split('/').pop();
@@ -307,27 +320,30 @@
             const entry = filesMap[path];
             if (!entry) return;
 
-            // Fetch raw HTML text instead of a binary blob
             const htmlContent = await entry.async('string');
 
             emptyState.classList.add('hidden');
             viewerFrame.classList.remove('hidden');
 
-            // FIX: Use srcdoc to write code strings inline directly. 
-            // This stops iOS from un-rendering or clipping base64 images inside the sandboxed view frame.
+            // Set content string directly
             viewerFrame.srcdoc = htmlContent;
 
-            // Reliable scroll hooks using the dynamic content framework
             viewerFrame.onload = () => {
                 const frameWindow = viewerFrame.contentWindow;
                 
                 if (restoreScroll) {
                     const savedScroll = localStorage.getItem(`scroll_${path}`);
                     if (savedScroll) {
-                        // Short timeout gives iOS enough time to compute the document height with images loaded
-                        setTimeout(() => {
-                            frameWindow.scrollTo(0, parseFloat(savedScroll));
-                        }, 80);
+                        const targetScroll = parseFloat(savedScroll);
+                        // Multi-stage scroll execution handles rendering delays of heavy monolith image arrays
+                        let attempts = 0;
+                        const scrollInterval = setInterval(() => {
+                            frameWindow.scrollTo(0, targetScroll);
+                            attempts++;
+                            if (attempts > 10 || frameWindow.scrollY === targetScroll) {
+                                clearInterval(scrollInterval);
+                            }
+                        }, 50);
                     }
                 }
 
@@ -339,7 +355,10 @@
 
         function handleScrollEvent(e) {
             if (activePath) {
-                localStorage.setItem(`scroll_${activePath}`, e.target.defaultView.scrollY);
+                const frameWindow = viewerFrame.contentWindow;
+                if (frameWindow) {
+                    localStorage.setItem(`scroll_${activePath}`, frameWindow.scrollY);
+                }
             }
         }
 
