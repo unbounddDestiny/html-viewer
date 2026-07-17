@@ -111,7 +111,7 @@
 
     <div class="flex-1 flex relative overflow-hidden">
         
-        <aside id="sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transform transition-transform duration-300 flex flex-col md:static md:translate-x-0">
+        <aside id="sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transform -translate-x-full transition-transform duration-300 flex flex-col md:relative md:translate-x-0">
             <div class="p-3 border-b border-theme space-y-2">
                 <input type="text" id="search-input" placeholder="Search files..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)]">
                 <div class="flex justify-between items-center text-xs">
@@ -128,10 +128,10 @@
             </div>
         </aside>
 
-        <div id="sidebar-overlay" class="absolute inset-0 bg-black/40 z-10 hidden"></div>
+        <div id="sidebar-overlay" class="absolute inset-0 bg-black/50 z-10 hidden"></div>
 
-        <main class="flex-1 flex flex-col bg-stone-100 relative">
-            <iframe id="viewer-frame" class="w-full h-full border-none bg-white hidden"></iframe>
+        <main class="flex-1 flex flex-col bg-[var(--bg-base)] relative transition-colors duration-300">
+            <iframe id="viewer-frame" class="w-full h-full border-none hidden"></iframe>
             <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
                 <div class="text-5xl mb-4">🍵</div>
                 <h2 class="text-xl font-semibold mb-1">Your bookshelf is empty</h2>
@@ -157,17 +157,17 @@
         let filesMap = {}; 
         let sortedFilePaths = [];
         let activePath = null;
-        let isSidebarOpen = true; 
+        let isSidebarOpen = false; 
 
         // Initialize App
         async function init() {
-            // Setup responsive initial sidebar state
-            if (window.innerWidth < 768) {
-                isSidebarOpen = false;
-                sidebar.classList.add('-translate-x-full');
-            } else {
+            // Setup responsive initial sidebar state based on screen size
+            if (window.innerWidth >= 768) {
                 isSidebarOpen = true;
                 sidebar.classList.remove('-translate-x-full');
+            } else {
+                isSidebarOpen = false;
+                sidebar.classList.add('-translate-x-full');
             }
 
             // Setup Theme
@@ -187,6 +187,35 @@
             }
         }
 
+        // Apply background theme overrides inside the active iframe content context
+        function syncIframeTheme() {
+            try {
+                const frameDoc = viewerFrame.contentDocument || viewerFrame.contentWindow.document;
+                if (!frameDoc || !frameDoc.body) return;
+
+                // Grab computed background color of the main body container
+                const targetBg = getComputedStyle(document.body).getPropertyValue('--bg-base').trim();
+                const targetText = getComputedStyle(document.body).getPropertyValue('--text-main').trim();
+                
+                // Direct styles injection inside the target iframe document head
+                let styleTag = frameDoc.getElementById('viewer-theme-override');
+                if (!styleTag) {
+                    styleTag = frameDoc.createElement('style');
+                    styleTag.id = 'viewer-theme-override';
+                    frameDoc.head.appendChild(styleTag);
+                }
+                
+                styleTag.textContent = `
+                    body, html, #page, .wrapper, main { 
+                        background-color: ${targetBg} !important; 
+                        color: ${targetText} !important; 
+                    }
+                `;
+            } catch (e) {
+                console.warn("Cross-origin or early-load tracking prevented style syncing.", e);
+            }
+        }
+
         // Toggle Theme
         themeToggleBtn.addEventListener('click', () => {
             const isDark = document.documentElement.classList.contains('theme-dark') || 
@@ -195,9 +224,12 @@
             const nextTheme = isDark ? 'light' : 'dark';
             document.documentElement.className = `theme-${nextTheme}`;
             localStorage.setItem('theme', nextTheme);
+            
+            // Instantly sync the background inside the active book frame
+            syncIframeTheme();
         });
 
-        // Toggle Sidebar
+        // Toggle Sidebar Navigation Mechanics
         function toggleSidebar() {
             if (isSidebarOpen) {
                 sidebar.classList.add('-translate-x-full');
@@ -331,7 +363,6 @@
                 images.forEach(img => {
                     let embeddedBase64 = null;
                     
-                    // Look through all custom/lazy attributes for the actual WebP base64 content
                     for (const attr of img.attributes) {
                         if (attr.value.startsWith('data:image/')) {
                             if (attr.name !== 'src' || !embeddedBase64) {
@@ -340,10 +371,9 @@
                         }
                     }
                     
-                    // Force the hidden image payload straight into the rendering source attribute
                     if (embeddedBase64) {
                         img.setAttribute('src', embeddedBase64);
-                        img.removeAttribute('loading'); // Bypass standard layout delays
+                        img.removeAttribute('loading'); 
                         img.classList.remove('lazyload', 'lazy');
                     }
                 });
@@ -361,6 +391,9 @@
             viewerFrame.onload = () => {
                 const frameWindow = viewerFrame.contentWindow;
                 
+                // Immediately align theme background rules upon load resolution
+                syncIframeTheme();
+
                 if (restoreScroll) {
                     const savedScroll = localStorage.getItem(`scroll_${path}`);
                     if (savedScroll) {
