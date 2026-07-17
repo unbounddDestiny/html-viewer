@@ -157,7 +157,7 @@
         let filesMap = {}; 
         let sortedFilePaths = [];
         let activePath = null;
-        let isSidebarOpen = true; // Match desktop initial state
+        let isSidebarOpen = true; 
 
         // Initialize App
         async function init() {
@@ -267,7 +267,7 @@
                 return filename.toLowerCase().includes(query);
             });
 
-            // NATURAL SORTING: Handles 1, 2, 10, 20 correctly
+            // NATURAL SORTING: Handles numerical naming order correctly
             filtered.sort((a, b) => {
                 const nameA = a.split('/').pop();
                 const nameB = b.split('/').pop();
@@ -320,12 +320,42 @@
             const entry = filesMap[path];
             if (!entry) return;
 
-            const htmlContent = await entry.async('string');
+            let htmlContent = await entry.async('string');
+
+            // PRE-PASS FIX FOR LAZY-LOADED MONOLITH IMAGES
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+                const images = doc.querySelectorAll('img');
+                
+                images.forEach(img => {
+                    let embeddedBase64 = null;
+                    
+                    // Look through all custom/lazy attributes for the actual WebP base64 content
+                    for (const attr of img.attributes) {
+                        if (attr.value.startsWith('data:image/')) {
+                            if (attr.name !== 'src' || !embeddedBase64) {
+                                embeddedBase64 = attr.value;
+                            }
+                        }
+                    }
+                    
+                    // Force the hidden image payload straight into the rendering source attribute
+                    if (embeddedBase64) {
+                        img.setAttribute('src', embeddedBase64);
+                        img.removeAttribute('loading'); // Bypass standard layout delays
+                        img.classList.remove('lazyload', 'lazy');
+                    }
+                });
+                
+                htmlContent = doc.documentElement.outerHTML;
+            } catch (e) {
+                console.error("Image pre-pass preprocessing failed: ", e);
+            }
 
             emptyState.classList.add('hidden');
             viewerFrame.classList.remove('hidden');
 
-            // Set content string directly
             viewerFrame.srcdoc = htmlContent;
 
             viewerFrame.onload = () => {
@@ -335,7 +365,6 @@
                     const savedScroll = localStorage.getItem(`scroll_${path}`);
                     if (savedScroll) {
                         const targetScroll = parseFloat(savedScroll);
-                        // Multi-stage scroll execution handles rendering delays of heavy monolith image arrays
                         let attempts = 0;
                         const scrollInterval = setInterval(() => {
                             frameWindow.scrollTo(0, targetScroll);
@@ -347,7 +376,6 @@
                     }
                 }
 
-                // Listen for scroll shifts to cache placement details
                 frameWindow.removeEventListener('scroll', handleScrollEvent);
                 frameWindow.addEventListener('scroll', handleScrollEvent);
             };
@@ -362,11 +390,9 @@
             }
         }
 
-        // Event Listeners for Search & Sorting
         searchInput.addEventListener('input', renderFileList);
         sortSelect.addEventListener('change', renderFileList);
 
-        // Run On Start
         init();
     </script>
 </body>
