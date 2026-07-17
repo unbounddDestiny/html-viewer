@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Lofi HTML Archive Viewer</title>
+    <title>Lofi Coffee House Archive Viewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     
     <style>
-        /* Lofi Theme Definitions */
+        /* Lofi Coffee Theme Definitions */
         :root {
-            /* Light Theme: Warm Sepia / Oatmeal Cream */
+            /* Light Theme: Roasted Espresso / Oatmeal Cream */
             --bg-base: #f4edd8;
             --bg-surface: #eae0c8;
             --bg-sidebar: #dfd5b8;
@@ -24,7 +24,7 @@
 
         @media (prefers-color-scheme: dark) {
             :root {
-                /* Dark Theme: Midnight Lavender / Cozy Dusk */
+                /* Dark Theme: Midnight Brew / Cozy Café Dusk */
                 --bg-base: #1e1d2f;
                 --bg-surface: #252438;
                 --bg-sidebar: #191826;
@@ -88,136 +88,134 @@
         }
     </style>
 </head>
-<body class="h-screen w-screen flex flex-col overflow-hidden">
+<body class="h-screen w-screen flex flex-col overflow-hidden select-none">
 
     <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30">
         <div class="flex items-center space-x-3">
-            <button id="toggle-nav" class="p-2 rounded bg-sidebar border border-theme active:scale-95 transition-transform" title="Toggle Navigation">
+            <button id="barista-menu-toggle" class="p-2 rounded bg-sidebar border border-theme active:scale-95 transition-transform" title="Toggle Menu">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
             </button>
-            <h1 class="text-md md:text-lg font-bold tracking-tight">Lofi Viewer</h1>
+            <h1 class="text-md md:text-lg font-bold tracking-tight">Cozy Coffee House</h1>
         </div>
 
         <div class="flex items-center space-x-2">
-            <button id="theme-toggle" class="p-2 rounded bg-sidebar border border-theme text-sm">
-                🌓 Style
+            <button id="mug-style-toggle" class="p-2 rounded bg-sidebar border border-theme text-sm">
+                ☕ Mug Style
             </button>
             <label class="px-3 py-1.5 rounded bg-accent text-xs md:text-sm font-semibold text-stone-900 cursor-pointer shadow-sm hover:opacity-90 active:scale-95 transition-transform">
-                Load Zip
-                <input type="file" id="zip-file-input" accept=".zip" class="hidden">
+                Pour New Zip
+                <input type="file" id="coffee-zip-input" accept=".zip" class="hidden">
             </label>
         </div>
     </header>
 
     <div class="flex-1 flex relative overflow-hidden">
         
-        <aside id="sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transform -translate-x-full transition-transform duration-300 flex flex-col md:relative md:translate-x-0">
+        <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transform -translate-x-full transition-transform duration-300 flex flex-col md:relative md:translate-x-0">
             <div class="p-3 border-b border-theme space-y-2">
-                <input type="text" id="search-input" placeholder="Search files..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)]">
+                <input type="text" id="bean-search-input" placeholder="Search menu items..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)]">
                 <div class="flex justify-between items-center text-xs">
-                    <span class="text-muted">Sort:</span>
-                    <select id="sort-select" class="bg-surface border border-theme rounded px-1.5 py-0.5 focus:outline-none">
-                        <option value="asc">Name (A-Z)</option>
-                        <option value="desc">Name (Z-A)</option>
+                    <span class="text-muted">Roast Order:</span>
+                    <select id="roast-sort-select" class="bg-surface border border-theme rounded px-1.5 py-0.5 focus:outline-none">
+                        <option value="asc">Mild (A-Z)</option>
+                        <option value="desc">Dark (Z-A)</option>
                     </select>
                 </div>
             </div>
 
-            <div id="file-list" class="flex-1 overflow-y-auto p-2 space-y-1">
-                <div class="text-center py-8 text-sm text-muted">No zip loaded. Upload a zip to start.</div>
+            <div id="brewed-items-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+                <div class="text-center py-8 text-sm text-muted">No beans ground yet. Pour a zip to begin brewing.</div>
             </div>
         </aside>
 
-        <div id="sidebar-overlay" class="absolute inset-0 bg-black/50 z-10 hidden"></div>
+        <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/50 z-10 hidden transition-opacity duration-300 cursor-pointer"></div>
 
         <main class="flex-1 flex flex-col bg-[var(--bg-base)] relative transition-colors duration-300">
-            <iframe id="viewer-frame" class="w-full h-full border-none hidden"></iframe>
-            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                <div class="text-5xl mb-4">🍵</div>
-                <h2 class="text-xl font-semibold mb-1">Your bookshelf is empty</h2>
-                <p class="text-sm text-muted max-w-xs">Upload a zip archive containing monolith-bundled HTML files to begin reading.</p>
+            <iframe id="coffee-mug-frame" class="w-full h-full border-none hidden"></iframe>
+            <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                <div class="text-5xl mb-4">☕</div>
+                <h2 class="text-xl font-semibold mb-1">Your coffee mug is empty</h2>
+                <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
             </div>
         </main>
     </div>
 
     <script>
         // DOM Elements
-        const zipInput = document.getElementById('zip-file-input');
-        const fileListContainer = document.getElementById('file-list');
-        const viewerFrame = document.getElementById('viewer-frame');
-        const emptyState = document.getElementById('empty-state');
-        const sidebar = document.getElementById('sidebar');
-        const sidebarOverlay = document.getElementById('sidebar-overlay');
-        const toggleNavBtn = document.getElementById('toggle-nav');
-        const searchInput = document.getElementById('search-input');
-        const sortSelect = document.getElementById('sort-select');
-        const themeToggleBtn = document.getElementById('theme-toggle');
+        const coffeeZipInput = document.getElementById('coffee-zip-input');
+        const brewedItemsList = document.getElementById('brewed-items-list');
+        const coffeeMugFrame = document.getElementById('coffee-mug-frame');
+        const emptyMugState = document.getElementById('empty-mug-state');
+        const cafeMenuSidebar = document.getElementById('cafe-menu-sidebar');
+        const cafeApronOverlay = document.getElementById('cafe-apron-overlay');
+        const baristaMenuToggle = document.getElementById('barista-menu-toggle');
+        const beanSearchInput = document.getElementById('bean-search-input');
+        const roastSortSelect = document.getElementById('roast-sort-select');
+        const mugStyleToggle = document.getElementById('mug-style-toggle');
 
-        // State Variables
-        let filesMap = {}; 
-        let sortedFilePaths = [];
-        let activePath = null;
+        // State Tracking Engine
+        let groundBeansMap = {}; 
+        let sortedBeanPaths = [];
+        let activeBeanPath = null;
         let isSidebarOpen = false; 
 
-        // Initialize App
+        // Initialize Cafe Viewport Layout
         async function init() {
-            // Setup responsive initial sidebar state based on screen size
+            // Screen Breakpoint Check for initial setup
             if (window.innerWidth >= 768) {
                 isSidebarOpen = true;
-                sidebar.classList.remove('-translate-x-full');
+                cafeMenuSidebar.classList.remove('-translate-x-full');
             } else {
                 isSidebarOpen = false;
-                sidebar.classList.add('-translate-x-full');
+                cafeMenuSidebar.classList.add('-translate-x-full');
             }
 
-            // Setup Theme
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme) {
-                document.documentElement.className = `theme-${savedTheme}`;
+            // Restore Custom Lofi Mug Theme
+            const savedStyle = localStorage.getItem('theme');
+            if (savedStyle) {
+                document.documentElement.className = `theme-${savedStyle}`;
             }
 
-            // Restore Zip from IndexedDB
+            // Load Saved Beans from IndexedDB
             try {
-                const savedZipBlob = await localforage.getItem('cached_zip');
-                if (savedZipBlob) {
-                    await processZipFile(savedZipBlob);
+                const cachedBeans = await localforage.getItem('cached_zip');
+                if (cachedBeans) {
+                    await processCoffeeZip(cachedBeans);
                 }
             } catch (err) {
-                console.error("Failed to load cached zip from IndexedDB", err);
+                console.error("IndexedDB couldn't retrieve ground coffee archive:", err);
             }
         }
 
-        // Apply background theme overrides inside the active iframe content context
-        function syncIframeTheme() {
+        // Apply theme color styling matches deep into the active iframe page instance
+        function splashMugColor() {
             try {
-                const frameDoc = viewerFrame.contentDocument || viewerFrame.contentWindow.document;
+                const frameDoc = coffeeMugFrame.contentDocument || coffeeMugFrame.contentWindow.document;
                 if (!frameDoc || !frameDoc.body) return;
 
-                // Grab computed background color of the main body container
                 const targetBg = getComputedStyle(document.body).getPropertyValue('--bg-base').trim();
                 const targetText = getComputedStyle(document.body).getPropertyValue('--text-main').trim();
                 
-                // Direct styles injection inside the target iframe document head
-                let styleTag = frameDoc.getElementById('viewer-theme-override');
+                let styleTag = frameDoc.getElementById('mug-theme-override');
                 if (!styleTag) {
                     styleTag = frameDoc.createElement('style');
-                    styleTag.id = 'viewer-theme-override';
+                    styleTag.id = 'mug-theme-override';
                     frameDoc.head.appendChild(styleTag);
                 }
                 
                 styleTag.textContent = `
-                    body, html, #page, .wrapper, main { 
+                    body, html, #page, .wrapper, main, div, p, span, section, article { 
                         background-color: ${targetBg} !important; 
                         color: ${targetText} !important; 
                     }
                 `;
             } catch (e) {
-                console.warn("Cross-origin or early-load tracking prevented style syncing.", e);
+                console.warn("Cross-origin or early load cycle stopped theme delivery.", e);
             }
         }
 
-        // Toggle Theme
-        themeToggleBtn.addEventListener('click', () => {
+        // Toggle Mug Visual Styles
+        mugStyleToggle.addEventListener('click', () => {
             const isDark = document.documentElement.classList.contains('theme-dark') || 
                            (!document.documentElement.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
             
@@ -225,81 +223,89 @@
             document.documentElement.className = `theme-${nextTheme}`;
             localStorage.setItem('theme', nextTheme);
             
-            // Instantly sync the background inside the active book frame
-            syncIframeTheme();
+            splashMugColor();
         });
 
-        // Toggle Sidebar Navigation Mechanics
-        function toggleSidebar() {
+        // Fixed Sidebar Visibility Control Mechanics (Compatible with iOS Touch Event Handling)
+        function toggleSidebarState() {
             if (isSidebarOpen) {
-                sidebar.classList.add('-translate-x-full');
-                sidebarOverlay.classList.add('hidden');
+                cafeMenuSidebar.classList.add('-translate-x-full');
+                cafeApronOverlay.classList.add('hidden');
                 isSidebarOpen = false;
             } else {
-                sidebar.classList.remove('-translate-x-full');
+                cafeMenuSidebar.classList.remove('-translate-x-full');
                 if (window.innerWidth < 768) {
-                    sidebarOverlay.classList.remove('hidden');
+                    cafeApronOverlay.classList.remove('hidden');
                 }
                 isSidebarOpen = true;
             }
         }
-        toggleNavBtn.addEventListener('click', toggleSidebar);
-        sidebarOverlay.addEventListener('click', toggleSidebar);
+        
+        // Explicit Click bindings
+        baristaMenuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleSidebarState();
+        });
+        
+        cafeApronOverlay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleSidebarState();
+        });
 
-        // File Selection/Upload
-        zipInput.addEventListener('change', async (e) => {
+        // Load new file input zip package
+        coffeeZipInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
             try {
                 await localforage.setItem('cached_zip', file);
             } catch (err) {
-                console.warn("Storage quota exceeded. IndexedDB caching skipped.", err);
+                console.warn("Local cache threshold hit. Skipping store optimization.", err);
             }
 
-            await processZipFile(file);
+            await processCoffeeZip(file);
         });
 
         // Parse ZIP Contents
-        async function processZipFile(file) {
+        async function processCoffeeZip(file) {
             try {
                 const zip = await JSZip.loadAsync(file);
-                filesMap = {};
-                sortedFilePaths = [];
+                groundBeansMap = {};
+                sortedBeanPaths = [];
 
                 zip.forEach((relativePath, zipEntry) => {
                     if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.html')) {
-                        filesMap[relativePath] = zipEntry;
-                        sortedFilePaths.push(relativePath);
+                        groundBeansMap[relativePath] = zipEntry;
+                        sortedBeanPaths.push(relativePath);
                     }
                 });
 
-                renderFileList();
+                renderCafeMenu();
 
-                const lastPath = localStorage.getItem('last_active_path');
-                if (lastPath && filesMap[lastPath]) {
-                    await selectFile(lastPath, true);
-                } else if (sortedFilePaths.length > 0) {
-                    await selectFile(sortedFilePaths[0]);
+                const lastBrew = localStorage.getItem('last_active_path');
+                if (lastBrew && groundBeansMap[lastBrew]) {
+                    await pourMugSelection(lastBrew, true);
+                } else if (sortedBeanPaths.length > 0) {
+                    await pourMugSelection(sortedBeanPaths[0]);
                 }
 
             } catch (err) {
-                alert("Error loading ZIP file: " + err.message);
+                alert("Coffee package failed to pour: " + err.message);
                 console.error(err);
             }
         }
 
-        // Render File List with Natural Alphanumeric Sorting
-        function renderFileList() {
-            const query = searchInput.value.toLowerCase();
-            const sortOrder = sortSelect.value;
+        // Render Menu with Natural Alphanumeric Sorting
+        function renderCafeMenu() {
+            const query = beanSearchInput.value.toLowerCase();
+            const sortOrder = roastSortSelect.value;
 
-            let filtered = sortedFilePaths.filter(path => {
+            let filtered = sortedBeanPaths.filter(path => {
                 const filename = path.split('/').pop();
                 return filename.toLowerCase().includes(query);
             });
 
-            // NATURAL SORTING: Handles numerical naming order correctly
+            // NATURAL SORT: Manages matching numeric codes perfectly (e.g. 1, 2, 10)
             filtered.sort((a, b) => {
                 const nameA = a.split('/').pop();
                 const nameB = b.split('/').pop();
@@ -310,18 +316,18 @@
             });
 
             if (filtered.length === 0) {
-                fileListContainer.innerHTML = `<div class="text-center py-8 text-sm text-muted">No matching HTML files.</div>`;
+                brewedItemsList.innerHTML = `<div class="text-center py-8 text-sm text-muted">No café items match your blend search.</div>`;
                 return;
             }
 
-            fileListContainer.innerHTML = '';
+            brewedItemsList.innerHTML = '';
             filtered.forEach(path => {
                 const filename = path.split('/').pop();
                 const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
 
                 const button = document.createElement('button');
                 button.className = `w-full text-left p-3 rounded-lg border transition-all text-sm flex flex-col gap-1 ${
-                    activePath === path 
+                    activeBeanPath === path 
                         ? 'bg-accent text-stone-900 font-semibold border-transparent shadow-sm' 
                         : 'bg-surface border-theme hover:opacity-90'
                 }`;
@@ -332,29 +338,29 @@
                 `;
 
                 button.addEventListener('click', () => {
-                    selectFile(path);
+                    pourMugSelection(path);
                     if (window.innerWidth < 768) {
-                        toggleSidebar();
+                        toggleSidebarState();
                     }
                 });
 
-                fileListContainer.appendChild(button);
+                brewedItemsList.appendChild(button);
             });
         }
 
-        // Select and render a file
-        async function selectFile(path, restoreScroll = false) {
-            activePath = path;
+        // Render inside canvas frame
+        async function pourMugSelection(path, restoreScrollPosition = false) {
+            activeBeanPath = path;
             localStorage.setItem('last_active_path', path);
 
-            renderFileList();
+            renderCafeMenu();
 
-            const entry = filesMap[path];
+            const entry = groundBeansMap[path];
             if (!entry) return;
 
             let htmlContent = await entry.async('string');
 
-            // PRE-PASS FIX FOR LAZY-LOADED MONOLITH IMAGES
+            // PRE-PASS FIX FOR LAZY-LOADED EMBEDDED GRAPHICS 
             try {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(htmlContent, 'text/html');
@@ -380,21 +386,21 @@
                 
                 htmlContent = doc.documentElement.outerHTML;
             } catch (e) {
-                console.error("Image pre-pass preprocessing failed: ", e);
+                console.error("Graphics conversion cycle fault: ", e);
             }
 
-            emptyState.classList.add('hidden');
-            viewerFrame.classList.remove('hidden');
+            emptyMugState.classList.add('hidden');
+            coffeeMugFrame.classList.remove('hidden');
 
-            viewerFrame.srcdoc = htmlContent;
+            coffeeMugFrame.srcdoc = htmlContent;
 
-            viewerFrame.onload = () => {
-                const frameWindow = viewerFrame.contentWindow;
+            coffeeMugFrame.onload = () => {
+                const frameWindow = coffeeMugFrame.contentWindow;
                 
-                // Immediately align theme background rules upon load resolution
-                syncIframeTheme();
+                // Align internal color theme values immediately
+                splashMugColor();
 
-                if (restoreScroll) {
+                if (restoreScrollPosition) {
                     const savedScroll = localStorage.getItem(`scroll_${path}`);
                     if (savedScroll) {
                         const targetScroll = parseFloat(savedScroll);
@@ -409,22 +415,22 @@
                     }
                 }
 
-                frameWindow.removeEventListener('scroll', handleScrollEvent);
-                frameWindow.addEventListener('scroll', handleScrollEvent);
+                frameWindow.removeEventListener('scroll', cacheScrollPosition);
+                frameWindow.addEventListener('scroll', cacheScrollPosition);
             };
         }
 
-        function handleScrollEvent(e) {
-            if (activePath) {
-                const frameWindow = viewerFrame.contentWindow;
+        function cacheScrollPosition(e) {
+            if (activeBeanPath) {
+                const frameWindow = coffeeMugFrame.contentWindow;
                 if (frameWindow) {
-                    localStorage.setItem(`scroll_${activePath}`, frameWindow.scrollY);
+                    localStorage.setItem(`scroll_${activeBeanPath}`, frameWindow.scrollY);
                 }
             }
         }
 
-        searchInput.addEventListener('input', renderFileList);
-        sortSelect.addEventListener('change', renderFileList);
+        beanSearchInput.addEventListener('input', renderCafeMenu);
+        roastSortSelect.addEventListener('change', renderCafeMenu);
 
         init();
     </script>
