@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Pages HTML Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: #f6f8fa;
+            overflow: hidden;
+            height: 100vh;
+            position: relative;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+        }
+
+        .viewer-container {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            padding: 10px;
+        }
+
+        .file-list {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 300px;
+            max-height: calc(100% - 40px);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 100;
+            overflow-y: auto;
+            padding: 15px;
+            transition: transform 0.3s ease;
+        }
+
+        .file-list.hidden {
+            transform: translateX(-350px);
+        }
+
+        .file-list h3 {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .file-item {
+            padding: 8px 0;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .file-item:hover {
+            background-color: #f0f5ff;
+        }
+
+        .nav-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #0969da;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-bar {
+            position: fixed;
+            bottom: 75px;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 12px 20px;
+            box-shadow: 0 -1px 5px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.3s ease;
+            z-index: 999;
+        }
+
+        .nav-bar.hidden {
+            transform: translateY(100%);
+        }
+
+        .nav-button {
+            background: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-button:hover {
+            background: #ebf0f5;
+        }
+
+        .file-info {
+            font-size: 14px;
+            color: #57606a;
+        }
+
+        .upload-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 20px;
+            color: #57606a;
+        }
+
+        .upload-button {
+            background: #0969da;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 20px;
+            margin-top: 15px;
+            cursor: pointer;
+        }
+
+        .hidden-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="viewer-container">
+            <div id="uploadArea" class="upload-area">
+                <h2>GitHub Pages HTML Viewer</h2>
+                <p>Select a ZIP file containing HTML files to view</p>
+                <input type="file" id="zipInput" class="hidden-input" accept=".zip">
+                <button class="upload-button" onclick="document.getElementById('zipInput').click()">Choose ZIP File</button>
+            </div>
+            <iframe id="contentFrame" style="display:none;"></iframe>
+        </div>
+
+        <div class="file-list" id="fileList">
+            <h3>HTML Files</h3>
+            <div id="fileListContent"></div>
+        </div>
+
+        <div class="nav-bar" id="navigationBar">
+            <button class="nav-button" id="prevButton">
+                <span>← Previous</span>
+            </button>
+            <div class="file-info" id="currentFileInfo">No file selected</div>
+            <button class="nav-button" id="nextButton">
+                <span>Next →</span>
+            </button>
+        </div>
+
+        <button class="nav-toggle" id="navToggle">⋮</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        // Global variables
+        let zipFiles = [];
+        let currentIndex = -1;
+        let currentZip = null;
+
+        // DOM Elements
+        const zipInput = document.getElementById('zipInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const contentFrame = document.getElementById('contentFrame');
+        const fileListContent = document.getElementById('fileListContent');
+        const navigationBar = document.getElementById('navigationBar');
+        const navToggle = document.getElementById('navToggle');
+        const prevButton = document.getElementById('prevButton');
+        const nextButton = document.getElementById('nextButton');
+        const currentFileInfo = document.getElementById('currentFileInfo');
+
+        // Toggle navigation bar visibility
+        navToggle.addEventListener('click', () => {
+            navigationBar.classList.toggle('hidden');
+        });
+
+        // Handle ZIP file selection
+        zipInput.addEventListener('change', handleZipFile);
+
+        // Navigation button event listeners
+        prevButton.addEventListener('click', showPreviousFile);
+        nextButton.addEventListener('click', showNextFile);
+
+        async function handleZipFile(e) {
+            const file = e.target.files[0];
+            if (!file || !file.name.endsWith('.zip')) return;
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                currentZip = await JSZip.loadAsync(arrayBuffer);
+                
+                // Extract HTML files
+                zipFiles = [];
+                currentZip.forEach((relativePath, zipEntry) => {
+                    if (relativePath.endsWith('.html') || relativePath.endsWith('.htm')) {
+                        zipFiles.push({
+                            path: relativePath,
+                            entry: zipEntry
+                        });
+                    }
+                });
+
+                // Sort by filename
+                zipFiles.sort((a, b) => a.path.localeCompare(b.path));
+
+                if (zipFiles.length === 0) {
+                    alert('No HTML files found in the ZIP archive.');
+                    return;
+                }
+
+                // Update file list UI
+                updateFileList();
+
+                // Show first file
+                currentIndex = 0;
+                await showFile(currentIndex);
+                
+                // Switch to viewer mode
+                uploadArea.style.display = 'none';
+                contentFrame.style.display = 'block';
+            } catch (error) {
+                console.error('Error processing ZIP file:', error);
+                alert('Error processing ZIP file. Please try another file.');
+            }
+        }
+
+        function updateFileList() {
+            fileListContent.innerHTML = '';
+            
+            zipFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.textContent = file.path;
+                fileItem.addEventListener('click', () => {
+                    currentIndex = index;
+                    showFile(index);
+                });
+                fileListContent.appendChild(fileItem);
+            });
+        }
+
+        async function showFile(index) {
+            if (index < 0 || index >= zipFiles.length) return;
+            
+            const file = zipFiles[index];
+            const content = await file.entry.async('text');
+            
+            // Create blob URL for the content
+            const blob = new Blob([content], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            
+            // Load content into iframe
+            contentFrame.src = url;
+            
+            // Update UI
+            currentFileInfo.textContent = `${index + 1} / ${zipFiles.length}: ${file.path}`;
+            highlightCurrentFile(index);
+        }
+
+        function highlightCurrentFile(index) {
+            const items = document.querySelectorAll('.file-item');
+            items.forEach((item, i) => {
+                if (i === index) {
+                    item.style.backgroundColor = '#ddf4ff';
+                    item.style.borderLeft = '3px solid #0969da';
+                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    item.style.backgroundColor = '';
+                    item.style.borderLeft = '';
+                }
+            });
+        }
+
+        function showPreviousFile() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                showFile(currentIndex);
+            }
+        }
+
+        function showNextFile() {
+            if (currentIndex < zipFiles.length - 1) {
+                currentIndex++;
+                showFile(currentIndex);
+            }
+        }
+
+        // Initialize navigation state
+        navigationBar.classList.add('hidden');
+    </script>
+</body>
+</html>
