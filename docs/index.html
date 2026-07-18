@@ -92,7 +92,7 @@
             user-select: auto !important;
         }
 
-        /* Cozy Animations & Transits for Mobile/Desktop */
+        /* Sidebar Animations */
         #cafe-menu-sidebar {
             -webkit-transform: translateX(-100%);
             transform: translateX(-100%);
@@ -189,19 +189,17 @@
 
         <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/40 z-10 opacity-0 pointer-events-none transition-opacity duration-300 cursor-pointer" aria-hidden="true"></div>
 
-        <main class="flex-1 relative bg-[var(--bg-base)] overflow-hidden flex flex-col">
+        <main class="flex-1 relative bg-[var(--bg-base)] overflow-hidden">
             
-            <div class="flex-1 w-full relative">
-                <iframe id="coffee-mug-frame" class="absolute inset-0 w-full h-full border-none hidden"></iframe>
-                
-                <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300">
-                    <div class="text-5xl mb-4 animate-bounce">☕</div>
-                    <h2 class="text-xl font-semibold mb-1">Your coffee mug is empty</h2>
-                    <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
-                </div>
+            <iframe id="coffee-mug-frame" class="absolute inset-0 w-full h-full border-none hidden"></iframe>
+            
+            <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300">
+                <div class="text-5xl mb-4 animate-bounce">☕</div>
+                <h2 class="text-xl font-semibold mb-1">Your coffee mug is empty</h2>
+                <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
             </div>
 
-            <div class="w-full flex justify-center pointer-events-none pb-6 z-20">
+            <div class="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none z-20">
                 <div id="cozy-pagination-dock" class="pointer-events-auto px-6 py-3.5 rounded-2xl border shadow-2xl flex items-center space-x-8 opacity-95 backdrop-blur-md min-w-[280px] md:min-w-[340px]">
                     <button id="brew-prev-btn" class="p-2.5 rounded-xl border border-theme bg-sidebar/50 hover:bg-black/5 dark:hover:bg-white/10 active:scale-75 transition-transform disabled:opacity-20 disabled:pointer-events-none" title="Previous Page">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
