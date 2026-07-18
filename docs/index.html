@@ -288,7 +288,7 @@
                 </button>
                 <div id="pour-dropdown-menu" class="hidden absolute right-0 top-full mt-1 w-44 rounded-md shadow-xl bg-surface border border-theme z-50 py-1 text-sm text-[var(--text-main)]">
                     <button id="src-run-id-btn" class="w-full text-left px-4 py-2 hover:bg-black/5 dark:hover:bg-white/5 flex items-center space-x-2">
-                        <span>Load from Run ID</span>
+                        <span>⚡</span> <span>Load from Run ID</span>
                     </button>
                 </div>
             </div>
@@ -319,7 +319,7 @@
                         <svg class="w-3 h-3 collapse-arrow transform" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                         <span class="text-xs font-bold tracking-wide uppercase opacity-75">History</span>
                     </div>
-                    <button id="clear-history-btn" class="text-[11px] text-muted hover:text-[var(--accent)] transition-colorsstopPropagation">Clear</button>
+                    <button id="clear-history-btn" class="text-[11px] text-muted hover:text-[var(--accent)] transition-colors">Clear</button>
                 </div>
                 <div id="history-content" class="hidden px-3 pb-3 max-h-[160px] overflow-y-auto space-y-1 text-xs border-t border-theme/30 pt-2">
                     <div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>
@@ -436,7 +436,6 @@
         const machineWrapper = document.getElementById('machine-wrapper');
         const carafeFluid = document.getElementById('carafe-fluid');
 
-        // Target your Val Town backend routing directly
         const BACKEND_ENDPOINT = "https://unboundddestiny--9f7a64b881cc11f1b3361607ee4eb77e.web.val.run";
 
         const pourDropdownTrigger = document.getElementById('pour-dropdown-trigger');
@@ -464,6 +463,7 @@
         let activeBeanPath = null;
         let isSidebarOpen = false; 
         let readingHistoryArray = [];
+        let activeZipHash = "default_zip";
 
         function debounce(fn, delay) {
             let timeoutId;
@@ -471,6 +471,17 @@
                 clearTimeout(timeoutId);
                 timeoutId = setTimeout(() => fn(...args), delay);
             };
+        }
+
+        async function computeBlobHash(blob) {
+            try {
+                const buffer = await blob.slice(0, 1024 * 50).arrayBuffer();
+                const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch(e) {
+                return "fallback_" + blob.size;
+            }
         }
 
         async function init() {
@@ -494,6 +505,7 @@
             try {
                 const cachedBeans = await localforage.getItem('cached_zip');
                 if (cachedBeans) {
+                    activeZipHash = await computeBlobHash(cachedBeans);
                     await processCoffeeZip(cachedBeans);
                 }
             } catch (err) {
@@ -522,7 +534,6 @@
             await fetchZipFromWorkflow(runId);
         });
 
-        // Safe 2-step artifact query & data-stream payload processing
         async function fetchZipFromWorkflow(runId) {
             const randomFact = funFacts[Math.floor(Math.random() * funFacts.length)];
             brewFunFact.textContent = randomFact;
@@ -533,26 +544,31 @@
             brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
 
             try {
-                // Step 1: Request artifact ID lookup map details
                 const metaUrl = `${BACKEND_ENDPOINT}?action=getArtifact&runId=${runId}`;
                 const metaRes = await fetch(metaUrl);
 
-                if(!metaRes.ok) throw new Error(`Artifact layout metadata request failed with status: ${metaRes.status}`);
-                const metaData = await metaRes.json();
+                if(!metaRes.ok) {
+                    const errorJson = await metaRes.json().catch(() => ({}));
+                    if (metaRes.status === 401 && errorJson.debug) {
+                        throw new Error(`Unauthorized (401). Browser sent referer: "${errorJson.debug.receivedReferer}"`);
+                    }
+                    throw new Error(`Artifact layout metadata request failed with status: ${metaRes.status}`);
+                }
                 
+                const metaData = await metaRes.json();
                 if(!metaData.artifactId) {
                     throw new Error("No artifact matching the name 'all-snapshots' was found inside that Run ID build pipeline.");
                 }
 
-                // Step 2: Request the real raw zip file content payload arraybuffer stream blocks
                 brewPercentageLabel.textContent = 'Brewing file stream...';
                 const fileUrl = `${BACKEND_ENDPOINT}?action=downloadArtifact&artifactId=${metaData.artifactId}`;
                 const fileRes = await fetch(fileUrl);
 
                 if(!fileRes.ok) throw new Error(`File download failed: status ${fileRes.status}`);
-                
                 const zipBlob = await fileRes.blob();
                 
+                activeZipHash = await computeBlobHash(zipBlob);
+
                 try {
                     await localforage.setItem('cached_zip', zipBlob);
                 } catch (e) {}
@@ -586,7 +602,6 @@
             currentlyRenderedList = [];
             activeBeanPath = null;
             
-            localStorage.removeItem('last_active_path');
             await localforage.removeItem('cached_zip');
             
             coffeeMugFrame.srcdoc = "";
@@ -658,6 +673,7 @@
             const file = e.target.files[0];
             if (!file) return;
 
+            activeZipHash = await computeBlobHash(file);
             try {
                 await localforage.setItem('cached_zip', file);
             } catch (err) {}
@@ -703,9 +719,9 @@
                 unloadZipBtn.classList.remove('hidden');
                 renderCafeMenu();
 
-                const lastBrew = localStorage.getItem('last_active_path');
-                if (lastBrew && groundBeansMap[lastBrew]) {
-                    await pourMugSelection(lastBrew, true);
+                const lastBrewForThisZip = localStorage.getItem(`last_path_${activeZipHash}`);
+                if (lastBrewForThisZip && groundBeansMap[lastBrewForThisZip]) {
+                    await pourMugSelection(lastBrewForThisZip, true);
                 } else if (currentlyRenderedList.length > 0) {
                     await pourMugSelection(currentlyRenderedList[0]);
                 }
@@ -825,7 +841,7 @@
 
         async function pourMugSelection(path, restoreScrollPosition = false) {
             activeBeanPath = path;
-            localStorage.setItem('last_active_path', path);
+            localStorage.setItem(`last_path_${activeZipHash}`, path);
 
             appendHistoryTrack(path);
             renderCafeMenu();
@@ -869,7 +885,7 @@
                 cozyPaginationDock.classList.remove('dock-visible');
 
                 if (restoreScrollPosition) {
-                    const savedScroll = localStorage.getItem(`scroll_${path}`);
+                    const savedScroll = localStorage.getItem(`scroll_${activeZipHash}_${path}`);
                     if (savedScroll) {
                         const targetScroll = parseFloat(savedScroll);
                         let attempts = 0;
@@ -882,6 +898,11 @@
                         }, 50);
                     }
                 }
+
+                // Force calculation of pagination dock position immediately for short documents
+                setTimeout(() => {
+                    handleFrameScroll();
+                }, 100);
 
                 frameWindow.removeEventListener('scroll', handleFrameScroll);
                 frameWindow.addEventListener('scroll', handleFrameScroll);
@@ -898,7 +919,7 @@
             const totalHeight = docElem.scrollHeight;
             const scrollPos = win.scrollY + win.innerHeight;
 
-            if (totalHeight - scrollPos <= 45) {
+            if (totalHeight - scrollPos <= 45 || totalHeight <= win.innerHeight) {
                 cozyPaginationDock.classList.add('dock-visible');
             } else {
                 cozyPaginationDock.classList.remove('dock-visible');
@@ -906,10 +927,10 @@
         }
 
         const cacheScrollPosition = debounce(() => {
-            if (activeBeanPath) {
+            if (activeBeanPath && activeZipHash) {
                 const frameWindow = coffeeMugFrame.contentWindow;
                 if (frameWindow) {
-                    localStorage.setItem(`scroll_${activeBeanPath}`, frameWindow.scrollY);
+                    localStorage.setItem(`scroll_${activeZipHash}_${activeBeanPath}`, frameWindow.scrollY);
                 }
             }
         }, 200);
@@ -922,7 +943,6 @@
             cozyPaginationDock.style.display = 'flex';
 
             const currentIndex = currentlyRenderedList.indexOf(activeBeanPath);
-            
             if(currentIndex !== -1) {
                 cozyDockDropdown.value = activeBeanPath;
             }
