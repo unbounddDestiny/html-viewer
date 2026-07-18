@@ -19,6 +19,7 @@
             --accent: #d27974;
             --accent-hover: #b95d59;
             --border-color: #d3c7a8;
+            --empty-mug-text: #c15c56;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -31,6 +32,7 @@
                 --accent: #ebbcba;
                 --accent-hover: #e0afad;
                 --border-color: #312f44;
+                --empty-mug-text: #ebbcba;
             }
         }
 
@@ -43,6 +45,7 @@
             --accent: #d27974;
             --accent-hover: #b95d59;
             --border-color: #d3c7a8;
+            --empty-mug-text: #c15c56;
         }
 
         html.theme-dark {
@@ -54,6 +57,7 @@
             --accent: #ebbcba;
             --accent-hover: #e0afad;
             --border-color: #312f44;
+            --empty-mug-text: #ebbcba;
         }
 
         body {
@@ -71,6 +75,7 @@
         .bg-accent { background-color: var(--accent); }
         .bg-accent:hover { background-color: var(--accent-hover); }
         .border-theme { border-color: var(--border-color); }
+        .text-empty-mug { color: var(--empty-mug-text); }
 
         ::-webkit-scrollbar {
             width: 8px;
@@ -105,9 +110,17 @@
 
         @media (min-width: 768px) {
             #cafe-menu-sidebar {
+                -webkit-transform: translateX(-100%) !important;
+                transform: translateX(-100%) !important;
+                width: 20rem;
+                opacity: 0;
+            }
+            #cafe-menu-sidebar.sidebar-open {
                 -webkit-transform: translateX(0) !important;
                 transform: translateX(0) !important;
-                transition: width 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s ease !important;
+                opacity: 1;
+                overflow: visible;
+                border-right-width: 1px;
             }
             #cafe-menu-sidebar:not(.sidebar-open) {
                 width: 0px !important;
@@ -144,7 +157,6 @@
             background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23e0def4' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/></svg>");
         }
 
-        /* Rotatable indicator for collapsible headers */
         .collapse-arrow {
             transition: transform 0.2s ease;
         }
@@ -154,6 +166,17 @@
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col overflow-hidden select-none">
+
+    <div id="brew-loader-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-surface border border-theme rounded-2xl p-6 w-72 max-w-full text-center shadow-2xl flex flex-col items-center">
+            <span class="text-4xl mb-2 animate-spin duration-1000">⏳</span>
+            <h3 class="text-md font-bold tracking-tight mb-1">Brewing Zip Contents...</h3>
+            <p id="brew-percentage-label" class="text-xs font-semibold accent-color mb-4">0% complete</p>
+            <div class="w-full bg-black/10 dark:bg-white/10 h-2 rounded-full overflow-hidden border border-theme">
+                <div id="brew-progress-bar" class="h-full bg-accent transition-all duration-100" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
 
     <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30 shrink-0">
         <div class="flex items-center space-x-3">
@@ -207,7 +230,7 @@
                     <div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>
                 </div>
             </div>
-        </aside>
+         </aside>
 
         <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/40 z-10 opacity-0 pointer-events-none transition-opacity duration-300 cursor-pointer" aria-hidden="true"></div>
 
@@ -217,7 +240,7 @@
             
             <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 z-10 select-none">
                 <div class="text-5xl mb-4 animate-bounce">☕</div>
-                <h2 class="text-xl font-semibold mb-1">Your coffee mug is empty</h2>
+                <h2 class="text-xl font-semibold mb-1 text-empty-mug">Your coffee mug is empty</h2>
                 <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
             </div>
 
@@ -266,11 +289,15 @@
         const readingHistoryList = document.getElementById('history-content');
         const clearHistoryBtn = document.getElementById('clear-history-btn');
 
+        const brewLoaderOverlay = document.getElementById('brew-loader-overlay');
+        const brewPercentageLabel = document.getElementById('brew-percentage-label');
+        const brewProgressBar = document.getElementById('brew-progress-bar');
+
         let groundBeansMap = {};
         let sortedBeanPaths = [];
         let currentlyRenderedList = []; 
         let activeBeanPath = null;
-        let isSidebarOpen = false;
+        let isSidebarOpen = false; // Closed by default on load
         let readingHistoryArray = [];
 
         function debounce(fn, delay) {
@@ -282,9 +309,10 @@
         }
 
         async function init() {
-            isSidebarOpen = window.innerWidth >= 768;
-            cafeMenuSidebar.classList.toggle('sidebar-open', isSidebarOpen);
-            baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
+            // Force sidebar closed on initialization / reload
+            isSidebarOpen = false;
+            cafeMenuSidebar.classList.remove('sidebar-open');
+            baristaMenuToggle.setAttribute('aria-expanded', 'false');
 
             const savedStyle = localStorage.getItem('theme');
             if (savedStyle) {
@@ -309,9 +337,8 @@
             }
         }
 
-        // Toggle collapsible history panel view
         historyHeaderTrigger.addEventListener('click', (e) => {
-            if (e.target === clearHistoryBtn) return; // Ignore clear buttons clicks
+            if (e.target === clearHistoryBtn) return;
             const isCollapsed = historyWrapper.classList.contains('collapsed');
             if (isCollapsed) {
                 historyWrapper.classList.remove('collapsed');
@@ -322,7 +349,6 @@
             }
         });
 
-        // Unload Complete Package logic handler
         unloadZipBtn.addEventListener('click', async () => {
             if (!confirm("Are you sure you want to unload the current archive file?")) return;
             
@@ -393,9 +419,7 @@
                 cafeApronOverlay.classList.add('opacity-0', 'pointer-events-none');
             }
 
-            if (window.innerWidth >= 768) {
-                window.dispatchEvent(new Event('resize'));
-            }
+            window.dispatchEvent(new Event('resize'));
         }
 
         baristaMenuToggle.addEventListener('click', () => toggleSidebarState());
@@ -412,17 +436,36 @@
         });
 
         async function processCoffeeZip(file) {
+            // Turn progress visual tracking layer on
+            brewProgressBar.style.width = '0%';
+            brewPercentageLabel.textContent = '0% complete';
+            brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
+
             try {
                 const zip = await JSZip.loadAsync(file);
                 groundBeansMap = {};
                 sortedBeanPaths = [];
 
-                zip.forEach((relativePath, zipEntry) => {
+                const totalEntries = Object.keys(zip.files).length;
+                let currentProcessed = 0;
+
+                // Emulate loop extraction hooks to present accurate visual data metrics
+                for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+                    currentProcessed++;
                     if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.html')) {
                         groundBeansMap[relativePath] = zipEntry;
                         sortedBeanPaths.push(relativePath);
                     }
-                });
+                    
+                    const progressPercent = Math.round((currentProcessed / totalEntries) * 100);
+                    brewProgressBar.style.width = `${progressPercent}%`;
+                    brewPercentageLabel.textContent = `${progressPercent}% complete`;
+                    
+                    // Tiny window delay interval to keep layout tracking frame operational
+                    if(currentProcessed % 20 === 0) {
+                        await new Promise(r => setTimeout(r, 0));
+                    }
+                }
 
                 unloadZipBtn.classList.remove('hidden');
                 renderCafeMenu();
@@ -436,6 +479,11 @@
 
             } catch (err) {
                 alert("Coffee package failed to pour: " + err.message);
+            } finally {
+                // Clear active loader animation state variables out 
+                setTimeout(() => {
+                    brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
+                }, 400);
             }
         }
 
