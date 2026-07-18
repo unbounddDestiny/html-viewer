@@ -163,18 +163,43 @@
         .collapsed .collapse-arrow {
             transform: rotate(-90deg);
         }
+
+        /* Loading Animation Effects */
+        @keyframes coffee-shake {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(2deg); }
+            75% { transform: rotate(-2deg); }
+        }
+        @keyframes steam-rise {
+            0% { transform: translateY(0px) scale(0.9); opacity: 0.4; }
+            50% { opacity: 0.8; }
+            100% { transform: translateY(-10px) scale(1.2); opacity: 0; }
+        }
+        .animate-shake {
+            animation: coffee-shake 0.4s ease infinite;
+        }
+        .steam-bubble {
+            animation: steam-rise 0.8s ease-in-out infinite;
+        }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col overflow-hidden select-none">
 
-    <div id="brew-loader-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
-        <div class="bg-surface border border-theme rounded-2xl p-6 w-72 max-w-full text-center shadow-2xl flex flex-col items-center">
-            <span class="text-4xl mb-2 animate-spin duration-1000">⏳</span>
-            <h3 class="text-md font-bold tracking-tight mb-1">Brewing Zip Contents...</h3>
-            <p id="brew-percentage-label" class="text-xs font-semibold accent-color mb-4">0% complete</p>
-            <div class="w-full bg-black/10 dark:bg-white/10 h-2 rounded-full overflow-hidden border border-theme">
-                <div id="brew-progress-bar" class="h-full bg-accent transition-all duration-100" style="width: 0%"></div>
-            </div>
+    <div id="brew-loader-overlay" class="fixed inset-0 bg-[var(--bg-base)] z-50 flex flex-col items-center justify-center p-6 text-center transition-opacity duration-300 opacity-0 pointer-events-none">
+        <div class="relative flex items-center justify-center mb-4">
+            <span id="brew-machine-steam" class="absolute -top-6 text-xl opacity-0 steam-bubble">💨</span>
+            <div id="brew-machine-icon" class="text-6xl transition-transform duration-300">☕</div>
+        </div>
+        <h2 class="text-xl font-semibold mb-1 text-empty-mug">Brewing Your Archive...</h2>
+        <p id="brew-percentage-label" class="text-sm font-bold text-muted mb-4">0% grounded</p>
+        
+        <div class="w-64 bg-black/5 dark:bg-white/5 h-2 rounded-full overflow-hidden border border-theme mb-6">
+            <div id="brew-progress-bar" class="h-full bg-accent transition-all duration-100" style="width: 0%"></div>
+        </div>
+
+        <div class="max-w-xs p-4 rounded-xl bg-surface border border-theme shadow-sm">
+            <span class="text-[10px] tracking-wider uppercase font-bold text-muted block mb-1">Cozy Trivia Minute</span>
+            <p id="brew-fun-fact" class="text-xs text-muted italic">Grinding facts...</p>
         </div>
     </div>
 
@@ -190,7 +215,7 @@
             <button id="mug-style-toggle" class="p-2 rounded bg-sidebar border border-theme text-sm active:scale-95 transition-transform">
                 Mug Style
             </button>
-            <button id="unload-zip-btn" class="p-2 rounded bg-sidebar border border-theme text-sm text-stone-500 hover:text-[var(--accent)] active:scale-95 transition-all hidden" title="Unload File Archive">
+            <button id="unload-zip-btn" class="p-2 rounded bg-sidebar border border-theme text-sm text-empty-mug font-medium active:scale-95 transition-all hidden" title="Unload File Archive">
                 Empty Cup
             </button>
             <label class="px-3 py-1.5 rounded bg-accent text-xs md:text-sm font-semibold text-stone-900 cursor-pointer shadow-sm hover:opacity-90 active:scale-95 transition-transform duration-200">
@@ -292,12 +317,27 @@
         const brewLoaderOverlay = document.getElementById('brew-loader-overlay');
         const brewPercentageLabel = document.getElementById('brew-percentage-label');
         const brewProgressBar = document.getElementById('brew-progress-bar');
+        const brewFunFact = document.getElementById('brew-fun-fact');
+        const brewMachineIcon = document.getElementById('brew-machine-icon');
+        const brewMachineSteam = document.getElementById('brew-machine-steam');
+
+        // Cozy SFW fun facts list
+        const funFacts = [
+            "Strawberries aren't actual berries, but bananas, pumpkins, and watermelons technically are!",
+            "Before basic alarms, there were 'knocker-ups' who went around tapping on windows with sticks to wake people up.",
+            "Honey never spoils. You could theoretically eat 3,000-year-old Egyptian tomb honey.",
+            "The total weight of all the ants on Earth is roughly equal to the total weight of all humans.",
+            "Wombat droppings are shaped like perfect cubes, which stops them from rolling away.",
+            "The first computer bug was an actual real moth found stuck in a system relay by Grace Hopper in 1947.",
+            "Sea otters hold paws when they sleep so they don't drift apart in the current.",
+            "A day on Venus is longer than a whole year on Venus."
+        ];
 
         let groundBeansMap = {};
         let sortedBeanPaths = [];
         let currentlyRenderedList = []; 
         let activeBeanPath = null;
-        let isSidebarOpen = false; // Closed by default on load
+        let isSidebarOpen = false; 
         let readingHistoryArray = [];
 
         function debounce(fn, delay) {
@@ -309,7 +349,6 @@
         }
 
         async function init() {
-            // Force sidebar closed on initialization / reload
             isSidebarOpen = false;
             cafeMenuSidebar.classList.remove('sidebar-open');
             baristaMenuToggle.setAttribute('aria-expanded', 'false');
@@ -436,10 +475,16 @@
         });
 
         async function processCoffeeZip(file) {
-            // Turn progress visual tracking layer on
+            // Apply a fresh random fun fact
+            const randomFact = funFacts[Math.floor(Math.random() * funFacts.length)];
+            brewFunFact.textContent = randomFact;
+
             brewProgressBar.style.width = '0%';
-            brewPercentageLabel.textContent = '0% complete';
+            brewPercentageLabel.textContent = '0% grounded';
             brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
+            
+            // Start mild shaking animation effect
+            brewMachineIcon.classList.add('animate-shake');
 
             try {
                 const zip = await JSZip.loadAsync(file);
@@ -449,7 +494,6 @@
                 const totalEntries = Object.keys(zip.files).length;
                 let currentProcessed = 0;
 
-                // Emulate loop extraction hooks to present accurate visual data metrics
                 for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
                     currentProcessed++;
                     if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.html')) {
@@ -459,9 +503,13 @@
                     
                     const progressPercent = Math.round((currentProcessed / totalEntries) * 100);
                     brewProgressBar.style.width = `${progressPercent}%`;
-                    brewPercentageLabel.textContent = `${progressPercent}% complete`;
+                    brewPercentageLabel.textContent = `${progressPercent}% grounded`;
                     
-                    // Tiny window delay interval to keep layout tracking frame operational
+                    // Release dynamic puff visuals past half-way mark
+                    if (progressPercent > 50) {
+                        brewMachineSteam.style.opacity = '1';
+                    }
+
                     if(currentProcessed % 20 === 0) {
                         await new Promise(r => setTimeout(r, 0));
                     }
@@ -480,7 +528,9 @@
             } catch (err) {
                 alert("Coffee package failed to pour: " + err.message);
             } finally {
-                // Clear active loader animation state variables out 
+                // Clear animation layers out cleanly
+                brewMachineIcon.classList.remove('animate-shake');
+                brewMachineSteam.style.opacity = '0';
                 setTimeout(() => {
                     brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
                 }, 400);
@@ -560,6 +610,7 @@
             renderHistoryView();
         }
 
+        // View rendering logic for reading logs tracker
         function renderHistoryView() {
             if(readingHistoryArray.length === 0) {
                 readingHistoryList.innerHTML = `<div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>`;
