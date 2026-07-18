@@ -288,7 +288,7 @@
                 </button>
                 <div id="pour-dropdown-menu" class="hidden absolute right-0 top-full mt-1 w-44 rounded-md shadow-xl bg-surface border border-theme z-50 py-1 text-sm text-[var(--text-main)]">
                     <button id="src-run-id-btn" class="w-full text-left px-4 py-2 hover:bg-black/5 dark:hover:bg-white/5 flex items-center space-x-2">
-                        <span>⚡</span> <span>Load from Run ID</span>
+                        <span>Load from Run ID</span>
                     </button>
                 </div>
             </div>
@@ -371,17 +371,11 @@
                 <div class="bg-surface border border-theme rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4">
                     <div>
                         <h3 class="text-md font-bold text-empty-mug">Fetch from Github Run ID</h3>
-                        <p class="text-xs text-muted">Pull snapshot builds directly from your archive workflows.</p>
+                        <p class="text-xs text-muted">Pull snapshot builds directly from your workflow run.</p>
                     </div>
                     <div class="space-y-2">
-                        <label class="block text-xs font-bold uppercase tracking-wider opacity-70">Backend Endpoint URL</label>
-                        <input type="text" id="run-endpoint-input" placeholder="https://val.town proxy endpoint..." class="w-full text-sm p-2 rounded bg-[var(--bg-base)] border border-theme focus:outline-none">
-                        
                         <label class="block text-xs font-bold uppercase tracking-wider opacity-70">Run ID</label>
                         <input type="text" id="run-id-input" placeholder="e.g. 1234567890" class="w-full text-sm p-2 rounded bg-[var(--bg-base)] border border-theme focus:outline-none">
-                        
-                        <label class="block text-xs font-bold uppercase tracking-wider opacity-70">Custom Secret Key</label>
-                        <input type="password" id="run-secret-input" placeholder="X-Custom-Auth password" class="w-full text-sm p-2 rounded bg-[var(--bg-base)] border border-theme focus:outline-none">
                     </div>
                     <div class="flex space-x-2 pt-2">
                         <button id="run-modal-cancel" class="flex-1 py-2 text-xs border border-theme rounded-xl hover:bg-black/5 text-muted transition-all">Cancel</button>
@@ -442,14 +436,14 @@
         const machineWrapper = document.getElementById('machine-wrapper');
         const carafeFluid = document.getElementById('carafe-fluid');
 
-        // New Backend Interface Selectors
+        // Target your Val Town backend routing directly
+        const BACKEND_ENDPOINT = "https://unboundddestiny--9f7a64b881cc11f1b3361607ee4eb77e.web.val.run";
+
         const pourDropdownTrigger = document.getElementById('pour-dropdown-trigger');
         const pourDropdownMenu = document.getElementById('pour-dropdown-menu');
         const srcRunIdBtn = document.getElementById('src-run-id-btn');
         const runIdModal = document.getElementById('run-id-modal');
-        const runEndpointInput = document.getElementById('run-endpoint-input');
         const runIdInput = document.getElementById('run-id-input');
-        const runSecretInput = document.getElementById('run-secret-input');
         const runModalCancel = document.getElementById('run-modal-cancel');
         const runModalSubmit = document.getElementById('run-modal-submit');
 
@@ -489,10 +483,6 @@
                 document.documentElement.className = `theme-${savedStyle}`;
             }
 
-            // Restore last used backend input parameters
-            runEndpointInput.value = localStorage.getItem('cozy_backend_url') || '';
-            runSecretInput.value = localStorage.getItem('cozy_backend_secret') || '';
-
             try {
                 const preservedHistory = localStorage.getItem('cozy_reading_history');
                 if(preservedHistory) {
@@ -511,7 +501,6 @@
             }
         }
 
-        // Toggle Source Dropdown UI
         pourDropdownTrigger.addEventListener('click', (e) => {
             e.stopPropagation();
             pourDropdownMenu.classList.toggle('hidden');
@@ -524,69 +513,46 @@
         runModalCancel.addEventListener('click', () => runIdModal.classList.add('hidden'));
 
         runModalSubmit.addEventListener('click', async () => {
-            const endpoint = runEndpointInput.value.trim();
             const runId = runIdInput.value.trim();
-            const secret = runSecretInput.value.trim();
-
-            if(!endpoint || !runId || !secret) {
-                alert("Please fill out all backend parameters to parse the artifact.");
+            if(!runId) {
+                alert("Please enter a valid Workflow Run ID.");
                 return;
             }
-
-            // Persist endpoint metadata configurations locally
-            localStorage.setItem('cozy_backend_url', endpoint);
-            localStorage.setItem('cozy_backend_secret', secret);
             runIdModal.classList.add('hidden');
-
-            await fetchZipFromWorkflow(endpoint, runId, secret);
+            await fetchZipFromWorkflow(runId);
         });
 
-        // Interface directly with your provided endpoint script architecture
-        async function fetchZipFromWorkflow(endpoint, runId, secret) {
+        // Safe 2-step artifact query & data-stream payload processing
+        async function fetchZipFromWorkflow(runId) {
             const randomFact = funFacts[Math.floor(Math.random() * funFacts.length)];
             brewFunFact.textContent = randomFact;
             brewProgressBar.style.width = '0%';
             carafeFluid.style.height = '0%';
-            brewPercentageLabel.textContent = 'Connecting...';
+            brewPercentageLabel.textContent = 'Locating snapshot...';
             machineWrapper.classList.add('brewing');
             brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
 
             try {
-                // Step 1: Query endpoint for the matching artifact ID item
-                const targetUrl = `${endpoint.replace(/\/$/, '')}?action=getArtifact&runId=${runId}`;
-                const artRes = await fetch(targetUrl, {
-                    headers: { "X-Custom-Auth": secret }
-                });
+                // Step 1: Request artifact ID lookup map details
+                const metaUrl = `${BACKEND_ENDPOINT}?action=getArtifact&runId=${runId}`;
+                const metaRes = await fetch(metaUrl);
 
-                if(!artRes.ok) throw new Error(`Backend auth error: ${artRes.status}`);
-                const artData = await artRes.json();
+                if(!metaRes.ok) throw new Error(`Artifact layout metadata request failed with status: ${metaRes.status}`);
+                const metaData = await metaRes.json();
                 
-                if(!artData.artifactId) {
-                    throw new Error("No artifact matching name 'all-snapshots' was found inside that Run ID build pipeline.");
+                if(!metaData.artifactId) {
+                    throw new Error("No artifact matching the name 'all-snapshots' was found inside that Run ID build pipeline.");
                 }
 
-                // Step 2: Since GH artifacts are returned as direct binary zip packages, 
-                // we download the blob by reaching through standard repository authenticated fetch pipes
-                brewPercentageLabel.textContent = 'Downloading zip...';
-                
-                // Construct standard authenticated artifact download proxy requests if supported by endpoint, 
-                // otherwise fetch from standard workflow artifact reference maps
-                const downloadUrl = `https://api.github.com/repos/unbounddDestiny/miming-html/actions/artifacts/${artData.artifactId}/zip`;
-                
-                // Realizing token handling resides securely backend side, we fetch the artifact zip source block
-                // For your specific proxy format, if the action parameter is left out or tweaked, download directly.
-                // If your token configuration blocks direct browser cross-origin requests, we fetch through the custom proxy.
-                const proxyDownloadUrl = `${endpoint.replace(/\/$/, '')}?runId=${runId}&artifactId=${artData.artifactId}`;
-                
-                const zipResponse = await fetch(proxyDownloadUrl, {
-                    headers: { "X-Custom-Auth": secret }
-                });
+                // Step 2: Request the real raw zip file content payload arraybuffer stream blocks
+                brewPercentageLabel.textContent = 'Brewing file stream...';
+                const fileUrl = `${BACKEND_ENDPOINT}?action=downloadArtifact&artifactId=${metaData.artifactId}`;
+                const fileRes = await fetch(fileUrl);
 
-                if(!zipResponse.ok) throw new Error("Failed fetching binary artifact payload via proxy asset route.");
+                if(!fileRes.ok) throw new Error(`File download failed: status ${fileRes.status}`);
                 
-                const zipBlob = await zipResponse.blob();
+                const zipBlob = await fileRes.blob();
                 
-                // Cache into localized localForage store and spin up standard archive processor
                 try {
                     await localforage.setItem('cached_zip', zipBlob);
                 } catch (e) {}
@@ -594,7 +560,7 @@
                 await processCoffeeZip(zipBlob);
 
             } catch(err) {
-                alert(`Failed brewing from Workflow ID: ${err.message}`);
+                alert(`Brewing Error: ${err.message}`);
                 machineWrapper.classList.remove('brewing');
                 brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
             }
