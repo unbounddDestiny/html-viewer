@@ -60,7 +60,7 @@
             background-color: var(--bg-base);
             color: var(--text-main);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            transition: background-color 0.3s, color 0.3s;
+            transition: background-color 0.4s cubic-bezier(0.25, 1, 0.5, 1), color 0.4s cubic-bezier(0.25, 1, 0.5, 1);
             touch-action: manipulation;
         }
 
@@ -72,7 +72,6 @@
         .bg-accent:hover { background-color: var(--accent-hover); }
         .border-theme { border-color: var(--border-color); }
 
-        /* Custom Scrollbars */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -85,7 +84,6 @@
             border-radius: 4px;
         }
 
-        /* Interactive Sidebar Fixes for WebKit iOS & Orion */
         #barista-menu-toggle {
             cursor: pointer;
             position: relative;
@@ -94,27 +92,42 @@
             user-select: auto !important;
         }
 
-        /* Mobile Slide Over Defaults */
+        /* Cozy Animations & Transits for Mobile/Desktop */
         #cafe-menu-sidebar {
             -webkit-transform: translateX(-100%);
             transform: translateX(-100%);
-            transition: -webkit-transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: -webkit-transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, opacity 0.3s ease;
+            opacity: 0;
         }
         #cafe-menu-sidebar.sidebar-open {
             -webkit-transform: translateX(0);
             transform: translateX(0);
+            opacity: 1;
         }
 
-        /* Desktop Structural Layout management */
         @media (min-width: 768px) {
             #cafe-menu-sidebar {
                 -webkit-transform: translateX(0) !important;
                 transform: translateX(0) !important;
-                transition: none !important;
+                transition: width 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease !important;
             }
             #cafe-menu-sidebar:not(.sidebar-open) {
-                display: none !important;
+                width: 0px !important;
+                opacity: 0;
+                overflow: hidden;
+                border-right-width: 0px;
             }
+        }
+
+        /* Bottom Pagination Bar Styles */
+        #cozy-pagination-dock {
+            background-color: var(--bg-surface);
+            border-color: var(--border-color);
+            transform: translateY(120%);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+        }
+        #cozy-pagination-dock.dock-visible {
+            transform: translateY(0);
         }
     </style>
 </head>
@@ -122,17 +135,17 @@
 
     <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30">
         <div class="flex items-center space-x-3">
-            <button id="barista-menu-toggle" class="p-2 rounded bg-sidebar border border-theme active:scale-95 transition-transform" title="Toggle Menu" aria-label="Toggle Menu" aria-expanded="false" aria-controls="cafe-menu-sidebar">
+            <button id="barista-menu-toggle" class="p-2 rounded bg-sidebar border border-theme active:scale-90 transition-transform duration-200" title="Toggle Menu" aria-label="Toggle Menu" aria-expanded="false" aria-controls="cafe-menu-sidebar">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
             </button>
             <h1 class="text-md md:text-lg font-bold tracking-tight">Cozy Coffee House</h1>
         </div>
 
         <div class="flex items-center space-x-2">
-            <button id="mug-style-toggle" class="p-2 rounded bg-sidebar border border-theme text-sm">
+            <button id="mug-style-toggle" class="p-2 rounded bg-sidebar border border-theme text-sm active:scale-95 transition-transform">
                 ☕ Mug Style
             </button>
-            <label class="px-3 py-1.5 rounded bg-accent text-xs md:text-sm font-semibold text-stone-900 cursor-pointer shadow-sm hover:opacity-90 active:scale-95 transition-transform">
+            <label class="px-3 py-1.5 rounded bg-accent text-xs md:text-sm font-semibold text-stone-900 cursor-pointer shadow-sm hover:opacity-90 active:scale-95 transition-transform duration-200">
                 Pour New Zip
                 <input type="file" id="coffee-zip-input" accept=".zip" class="hidden">
             </label>
@@ -143,7 +156,7 @@
 
         <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 will-change-transform flex flex-col md:relative">
             <div class="p-3 border-b border-theme space-y-2">
-                <input type="text" id="bean-search-input" placeholder="Search menu items..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)]">
+                <input type="text" id="bean-search-input" placeholder="Search menu items..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all">
                 <div class="flex justify-between items-center text-xs">
                     <span class="text-muted">Roast Order:</span>
                     <select id="roast-sort-select" class="bg-surface border border-theme rounded px-1.5 py-0.5 focus:outline-none">
@@ -158,20 +171,33 @@
             </div>
         </aside>
 
-        <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/50 z-10 hidden transition-opacity duration-300 cursor-pointer" aria-hidden="true"></div>
+        <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/40 z-10 hidden transition-opacity duration-300 cursor-pointer" aria-hidden="true"></div>
 
-        <main class="flex-1 relative bg-[var(--bg-base)] transition-colors duration-300">
+        <main class="flex-1 relative bg-[var(--bg-base)] overflow-hidden">
             <iframe id="coffee-mug-frame" class="absolute inset-0 w-full h-full border-none hidden"></iframe>
-            <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                <div class="text-5xl mb-4">☕</div>
+            
+            <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300">
+                <div class="text-5xl mb-4 animate-bounce">☕</div>
                 <h2 class="text-xl font-semibold mb-1">Your coffee mug is empty</h2>
                 <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
+            </div>
+
+            <div id="cozy-pagination-dock" class="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-full border shadow-lg flex items-center space-x-6 z-20 opacity-95 backdrop-blur-md">
+                <button id="brew-prev-btn" class="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 active:scale-75 transition-transform disabled:opacity-30 disabled:pointer-events-none" title="Previous Page">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
+                <div class="flex flex-col items-center text-center select-none min-w-[100px]">
+                    <span class="text-[10px] tracking-wider uppercase opacity-60 font-semibold">Current Blend</span>
+                    <span id="cozy-dock-title" class="text-xs font-bold truncate max-w-[140px]">0 / 0</span>
+                </div>
+                <button id="brew-next-btn" class="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 active:scale-75 transition-transform disabled:opacity-30 disabled:pointer-events-none" title="Next Page">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                </button>
             </div>
         </main>
     </div>
 
     <script>
-        // DOM Elements
         const coffeeZipInput = document.getElementById('coffee-zip-input');
         const brewedItemsList = document.getElementById('brewed-items-list');
         const coffeeMugFrame = document.getElementById('coffee-mug-frame');
@@ -182,8 +208,13 @@
         const beanSearchInput = document.getElementById('bean-search-input');
         const roastSortSelect = document.getElementById('roast-sort-select');
         const mugStyleToggle = document.getElementById('mug-style-toggle');
+        
+        // Pagination Dock Elements
+        const cozyPaginationDock = document.getElementById('cozy-pagination-dock');
+        const brewPrevBtn = document.getElementById('brew-prev-btn');
+        const brewNextBtn = document.getElementById('brew-next-btn');
+        const cozyDockTitle = document.getElementById('cozy-dock-title');
 
-        // State Tracking Engine
         let groundBeansMap = {};
         let sortedBeanPaths = [];
         let activeBeanPath = null;
@@ -197,28 +228,23 @@
             };
         }
 
-        // Initialize Cafe Viewport Layout
         async function init() {
-            console.log("[Debug] Initializing view state. Screen Width:", window.innerWidth);
             isSidebarOpen = window.innerWidth >= 768;
-            
             cafeMenuSidebar.classList.toggle('sidebar-open', isSidebarOpen);
             baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
 
             const savedStyle = localStorage.getItem('theme');
             if (savedStyle) {
                 document.documentElement.className = `theme-${savedStyle}`;
-                console.log("[Debug] Restored theme from cache:", savedStyle);
             }
 
             try {
                 const cachedBeans = await localforage.getItem('cached_zip');
                 if (cachedBeans) {
-                    console.log("[Debug] Found cached zip in LocalForage, processing...");
                     await processCoffeeZip(cachedBeans);
                 }
             } catch (err) {
-                console.error("[Debug Error] IndexedDB couldn't retrieve archive:", err);
+                console.error(err);
             }
         }
 
@@ -243,30 +269,21 @@
                         color: ${targetText} !important; 
                     }
                 `;
-            } catch (e) {
-                console.warn("[Debug] Cross-origin or early load cycle stopped theme delivery.", e);
-            }
+            } catch (e) {}
         }
 
-        // Toggle Mug Visual Styles
         mugStyleToggle.addEventListener('click', () => {
-            console.log("[Debug Button] Mug Style clicked");
             const isDark = document.documentElement.classList.contains('theme-dark') ||
                            (!document.documentElement.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
             const nextTheme = isDark ? 'light' : 'dark';
             document.documentElement.className = `theme-${nextTheme}`;
             localStorage.setItem('theme', nextTheme);
-
             splashMugColor();
-            console.log("[Debug] Theme changed to:", nextTheme);
         });
 
-        // Sidebar Visibility Mechanics
         function toggleSidebarState() {
             isSidebarOpen = !isSidebarOpen;
-            console.log(`[Debug Action] Toggling sidebar. Target state -> Open: ${isSidebarOpen}`);
-            
             baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
 
             if (isSidebarOpen) {
@@ -279,39 +296,24 @@
                 cafeApronOverlay.classList.add('hidden');
             }
 
-            // Force WebKit layouts to properly compute container changes
             if (window.innerWidth >= 768) {
                 window.dispatchEvent(new Event('resize'));
-                console.log("[Debug] Dispatched resize reflow event for desktop WebKit engine.");
             }
         }
 
-        // Native Click bindings with removed restrictions for stable iOS/Orion routing
-        baristaMenuToggle.addEventListener('click', () => {
-            console.log("[Debug Button] Menu Toggle Button tapped");
-            toggleSidebarState();
-        });
-
-        cafeApronOverlay.addEventListener('click', () => {
-            console.log("[Debug Button] Close Menu Overlay backdrop tapped");
-            toggleSidebarState();
-        });
+        baristaMenuToggle.addEventListener('click', () => toggleSidebarState());
+        cafeApronOverlay.addEventListener('click', () => toggleSidebarState());
 
         coffeeZipInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            console.log("[Debug Input] New file loaded:", file.name, "Size:", file.size);
 
             try {
                 await localforage.setItem('cached_zip', file);
-            } catch (err) {
-                console.warn("[Debug] Local cache threshold hit. Skipping store optimization.", err);
-            }
-
+            } catch (err) {}
             await processCoffeeZip(file);
         });
 
-        // Parse ZIP Contents
         async function processCoffeeZip(file) {
             try {
                 const zip = await JSZip.loadAsync(file);
@@ -325,7 +327,6 @@
                     }
                 });
 
-                console.log(`[Debug] Archive parsing finished. Found ${sortedBeanPaths.length} HTML files.`);
                 renderCafeMenu();
 
                 const lastBrew = localStorage.getItem('last_active_path');
@@ -337,11 +338,9 @@
 
             } catch (err) {
                 alert("Coffee package failed to pour: " + err.message);
-                console.error("[Debug Error] Zip extraction cycle broken: ", err);
             }
         }
 
-        // Render Menu with Natural Alphanumeric Sorting
         function renderCafeMenu() {
             const query = beanSearchInput.value.toLowerCase();
             const sortOrder = roastSortSelect.value;
@@ -370,10 +369,10 @@
                 const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
 
                 const button = document.createElement('button');
-                button.className = `w-full text-left p-3 rounded-lg border transition-all text-sm flex flex-col gap-1 ${
+                button.className = `w-full text-left p-3 rounded-lg border transition-all duration-200 text-sm flex flex-col gap-1 ${
                     activeBeanPath === path
-                        ? 'bg-accent text-stone-900 font-semibold border-transparent shadow-sm'
-                        : 'bg-surface border-theme hover:opacity-90'
+                        ? 'bg-accent text-stone-900 font-semibold border-transparent shadow-sm scale-[0.99]'
+                        : 'bg-surface border-theme hover:opacity-90 active:scale-[0.98]'
                 }`;
 
                 button.innerHTML = `
@@ -382,7 +381,6 @@
                 `;
 
                 button.addEventListener('click', () => {
-                    console.log(`[Debug Button] Sidebar Item clicked: ${filename}`);
                     pourMugSelection(path);
                     if (window.innerWidth < 768) {
                         toggleSidebarState();
@@ -391,9 +389,10 @@
 
                 brewedItemsList.appendChild(button);
             });
+
+            updatePaginationControls();
         }
 
-        // Render inside canvas frame
         async function pourMugSelection(path, restoreScrollPosition = false) {
             activeBeanPath = path;
             localStorage.setItem('last_active_path', path);
@@ -427,9 +426,7 @@
                 });
 
                 htmlContent = doc.documentElement.outerHTML;
-            } catch (e) {
-                console.error("[Debug Error] Graphics conversion fault: ", e);
-            }
+            } catch (e) {}
 
             emptyMugState.classList.add('hidden');
             coffeeMugFrame.classList.remove('hidden');
@@ -438,6 +435,7 @@
             coffeeMugFrame.onload = () => {
                 const frameWindow = coffeeMugFrame.contentWindow;
                 splashMugColor();
+                cozyPaginationDock.classList.remove('dock-visible'); // Reset view scroll state position
 
                 if (restoreScrollPosition) {
                     const savedScroll = localStorage.getItem(`scroll_${path}`);
@@ -454,9 +452,28 @@
                     }
                 }
 
-                frameWindow.removeEventListener('scroll', cacheScrollPosition);
-                frameWindow.addEventListener('scroll', cacheScrollPosition);
+                frameWindow.removeEventListener('scroll', handleFrameScroll);
+                frameWindow.addEventListener('scroll', handleFrameScroll);
             };
+        }
+
+        // Monitors inside the loaded iframe to trigger pagination overlay smoothly at the end
+        function handleFrameScroll() {
+            cacheScrollPosition();
+
+            const win = coffeeMugFrame.contentWindow;
+            if (!win) return;
+
+            const docElem = win.document.documentElement;
+            const totalHeight = docElem.scrollHeight;
+            const scrollPos = win.scrollY + win.innerHeight;
+
+            // Pops up when user hits within 45px of the view's absolute base
+            if (totalHeight - scrollPos <= 45) {
+                cozyPaginationDock.classList.add('dock-visible');
+            } else {
+                cozyPaginationDock.classList.remove('dock-visible');
+            }
         }
 
         const cacheScrollPosition = debounce(() => {
@@ -467,6 +484,36 @@
                 }
             }
         }, 200);
+
+        // Handles Bottom Dock Text Counters and Arrow States
+        function updatePaginationControls() {
+            if (sortedBeanPaths.length === 0 || !activeBeanPath) {
+                cozyPaginationDock.style.display = 'none';
+                return;
+            }
+            cozyPaginationDock.style.display = 'flex';
+
+            const currentIndex = sortedBeanPaths.indexOf(activeBeanPath);
+            cozyDockTitle.textContent = `${currentIndex + 1} of ${sortedBeanPaths.length}`;
+
+            brewPrevBtn.disabled = currentIndex === 0;
+            brewNextBtn.disabled = currentIndex === sortedBeanPaths.length - 1;
+        }
+
+        // Action routes for dock arrows
+        brewPrevBtn.addEventListener('click', () => {
+            const currentIndex = sortedBeanPaths.indexOf(activeBeanPath);
+            if (currentIndex > 0) {
+                pourMugSelection(sortedBeanPaths[currentIndex - 1]);
+            }
+        });
+
+        brewNextBtn.addEventListener('click', () => {
+            const currentIndex = sortedBeanPaths.indexOf(activeBeanPath);
+            if (currentIndex < sortedBeanPaths.length - 1) {
+                pourMugSelection(sortedBeanPaths[currentIndex + 1]);
+            }
+        });
 
         beanSearchInput.addEventListener('input', renderCafeMenu);
         roastSortSelect.addEventListener('change', renderCafeMenu);
