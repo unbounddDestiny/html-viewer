@@ -185,6 +185,16 @@
             <div id="brewed-items-list" class="flex-1 overflow-y-auto p-2 space-y-1">
                 <div class="text-center py-8 text-sm text-muted">No beans ground yet. Pour a zip to begin brewing.</div>
             </div>
+
+            <div class="border-t border-theme p-3 bg-surface/40 flex flex-col max-h-[220px]">
+                <div class="flex justify-between items-center mb-1.5 px-1">
+                    <span class="text-xs font-bold tracking-wide uppercase opacity-75">History</span>
+                    <button id="clear-history-btn" class="text-[11px] text-muted hover:text-[var(--accent)] transition-colors">Clear</button>
+                </div>
+                <div id="reading-history-list" class="flex-1 overflow-y-auto space-y-1 pr-1 text-xs">
+                    <div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>
+                </div>
+            </div>
         </aside>
 
         <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/40 z-10 opacity-0 pointer-events-none transition-opacity duration-300 cursor-pointer" aria-hidden="true"></div>
@@ -236,11 +246,15 @@
         const brewPrevBtn = document.getElementById('brew-prev-btn');
         const brewNextBtn = document.getElementById('brew-next-btn');
         const cozyDockDropdown = document.getElementById('cozy-dock-dropdown');
+        const readingHistoryList = document.getElementById('reading-history-list');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
 
         let groundBeansMap = {};
         let sortedBeanPaths = [];
+        let currentlyRenderedList = []; // Holds the matching runtime visible sort configuration list
         let activeBeanPath = null;
         let isSidebarOpen = false;
+        let readingHistoryArray = [];
 
         function debounce(fn, delay) {
             let timeoutId;
@@ -260,304 +274,16 @@
                 document.documentElement.className = `theme-${savedStyle}`;
             }
 
+            // Load History tracking
+            try {
+                const preservedHistory = localStorage.getItem('cozy_reading_history');
+                if(preservedHistory) {
+                    readingHistoryArray = JSON.parse(preservedHistory);
+                }
+            } catch(e) { readingHistoryArray = []; }
+            renderHistoryView();
+
             try {
                 const cachedBeans = await localforage.getItem('cached_zip');
                 if (cachedBeans) {
-                    await processCoffeeZip(cachedBeans);
-                }
-            } catch (err) {
-                console.error(err);
-            }
-        }
-
-        function splashMugColor() {
-            try {
-                const frameDoc = coffeeMugFrame.contentDocument || coffeeMugFrame.contentWindow.document;
-                if (!frameDoc || !frameDoc.body) return;
-
-                const targetBg = getComputedStyle(document.body).getPropertyValue('--bg-base').trim();
-                const targetText = getComputedStyle(document.body).getPropertyValue('--text-main').trim();
-
-                let styleTag = frameDoc.getElementById('mug-theme-override');
-                if (!styleTag) {
-                    styleTag = frameDoc.createElement('style');
-                    styleTag.id = 'mug-theme-override';
-                    frameDoc.head.appendChild(styleTag);
-                }
-
-                styleTag.textContent = `
-                    body, html, #page, .wrapper, main, div, p, span, section, article { 
-                        background-color: ${targetBg} !important; 
-                        color: ${targetText} !important; 
-                    }
-                `;
-            } catch (e) {}
-        }
-
-        mugStyleToggle.addEventListener('click', () => {
-            const isDark = document.documentElement.classList.contains('theme-dark') ||
-                           (!document.documentElement.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-            const nextTheme = isDark ? 'light' : 'dark';
-            document.documentElement.className = `theme-${nextTheme}`;
-            localStorage.setItem('theme', nextTheme);
-            splashMugColor();
-        });
-
-        function toggleSidebarState() {
-            isSidebarOpen = !isSidebarOpen;
-            baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
-
-            if (isSidebarOpen) {
-                cafeMenuSidebar.classList.add('sidebar-open');
-                if (window.innerWidth < 768) {
-                    cafeApronOverlay.classList.remove('opacity-0', 'pointer-events-none');
-                    cafeApronOverlay.classList.add('opacity-100', 'pointer-events-auto');
-                }
-            } else {
-                cafeMenuSidebar.classList.remove('sidebar-open');
-                cafeApronOverlay.classList.remove('opacity-100', 'pointer-events-auto');
-                cafeApronOverlay.classList.add('opacity-0', 'pointer-events-none');
-            }
-
-            if (window.innerWidth >= 768) {
-                window.dispatchEvent(new Event('resize'));
-            }
-        }
-
-        baristaMenuToggle.addEventListener('click', () => toggleSidebarState());
-        cafeApronOverlay.addEventListener('click', () => toggleSidebarState());
-
-        coffeeZipInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            try {
-                await localforage.setItem('cached_zip', file);
-            } catch (err) {}
-            await processCoffeeZip(file);
-        });
-
-        async function processCoffeeZip(file) {
-            try {
-                const zip = await JSZip.loadAsync(file);
-                groundBeansMap = {};
-                sortedBeanPaths = [];
-
-                zip.forEach((relativePath, zipEntry) => {
-                    if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.html')) {
-                        groundBeansMap[relativePath] = zipEntry;
-                        sortedBeanPaths.push(relativePath);
-                    }
-                });
-
-                renderCafeMenu();
-
-                const lastBrew = localStorage.getItem('last_active_path');
-                if (lastBrew && groundBeansMap[lastBrew]) {
-                    await pourMugSelection(lastBrew, true);
-                } else if (sortedBeanPaths.length > 0) {
-                    await pourMugSelection(sortedBeanPaths[0]);
-                }
-
-            } catch (err) {
-                alert("Coffee package failed to pour: " + err.message);
-            }
-        }
-
-        function renderCafeMenu() {
-            const query = beanSearchInput.value.toLowerCase();
-            const sortOrder = roastSortSelect.value;
-
-            let filtered = sortedBeanPaths.filter(path => {
-                const filename = path.split('/').pop();
-                return filename.toLowerCase().includes(query);
-            });
-
-            filtered.sort((a, b) => {
-                const nameA = a.split('/').pop();
-                const nameB = b.split('/').pop();
-                return sortOrder === 'asc'
-                    ? nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
-                    : nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
-            });
-
-            cozyDockDropdown.innerHTML = '';
-            filtered.forEach((path, index) => {
-                const option = document.createElement('option');
-                option.value = path;
-                option.textContent = `Blend ${index + 1} of ${filtered.length}`;
-                cozyDockDropdown.appendChild(option);
-            });
-
-            if (filtered.length === 0) {
-                brewedItemsList.innerHTML = `<div class="text-center py-8 text-sm text-muted">No café items match your blend search.</div>`;
-                return;
-            }
-
-            brewedItemsList.innerHTML = '';
-            filtered.forEach(path => {
-                const filename = path.split('/').pop();
-                const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
-
-                const button = document.createElement('button');
-                button.className = `w-full text-left p-3 rounded-lg border transition-all duration-200 text-sm flex flex-col gap-1 ${
-                    activeBeanPath === path
-                        ? 'bg-accent text-stone-900 font-semibold border-transparent shadow-sm scale-[0.99]'
-                        : 'bg-surface border-theme hover:opacity-90 active:scale-[0.98]'
-                }`;
-
-                button.innerHTML = `
-                    <span class="truncate w-full">${filename}</span>
-                    ${folderPath ? `<span class="text-[10px] opacity-70 truncate w-full">${folderPath}</span>` : ''}
-                `;
-
-                button.addEventListener('click', () => {
-                    pourMugSelection(path);
-                    if (window.innerWidth < 768) {
-                        toggleSidebarState();
-                    }
-                });
-
-                brewedItemsList.appendChild(button);
-            });
-
-            updatePaginationControls(filtered);
-        }
-
-        async function pourMugSelection(path, restoreScrollPosition = false) {
-            activeBeanPath = path;
-            localStorage.setItem('last_active_path', path);
-
-            renderCafeMenu();
-
-            const entry = groundBeansMap[path];
-            if (!entry) return;
-
-            let htmlContent = await entry.async('string');
-
-            try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(htmlContent, 'text/html');
-                const images = doc.querySelectorAll('img');
-
-                images.forEach(img => {
-                    let embeddedBase64 = null;
-                    for (const attr of img.attributes) {
-                        if (attr.value.startsWith('data:image/')) {
-                            if (attr.name !== 'src' || !embeddedBase64) {
-                                embeddedBase64 = attr.value;
-                            }
-                        }
-                    }
-                    if (embeddedBase64) {
-                        img.setAttribute('src', embeddedBase64);
-                        img.removeAttribute('loading');
-                        img.classList.remove('lazyload', 'lazy');
-                    }
-                });
-
-                htmlContent = doc.documentElement.outerHTML;
-            } catch (e) {}
-
-            emptyMugState.classList.add('hidden');
-            coffeeMugFrame.classList.remove('hidden');
-            coffeeMugFrame.srcdoc = htmlContent;
-
-            coffeeMugFrame.onload = () => {
-                const frameWindow = coffeeMugFrame.contentWindow;
-                splashMugColor();
-                cozyPaginationDock.classList.remove('dock-visible');
-
-                if (restoreScrollPosition) {
-                    const savedScroll = localStorage.getItem(`scroll_${path}`);
-                    if (savedScroll) {
-                        const targetScroll = parseFloat(savedScroll);
-                        let attempts = 0;
-                        const scrollInterval = setInterval(() => {
-                            frameWindow.scrollTo(0, targetScroll);
-                            attempts++;
-                            if (attempts > 10 || frameWindow.scrollY === targetScroll) {
-                                clearInterval(scrollInterval);
-                            }
-                        }, 50);
-                    }
-                }
-
-                frameWindow.removeEventListener('scroll', handleFrameScroll);
-                frameWindow.addEventListener('scroll', handleFrameScroll);
-            };
-        }
-
-        function handleFrameScroll() {
-            cacheScrollPosition();
-
-            const win = coffeeMugFrame.contentWindow;
-            if (!win) return;
-
-            const docElem = win.document.documentElement;
-            const totalHeight = docElem.scrollHeight;
-            const scrollPos = win.scrollY + win.innerHeight;
-
-            if (totalHeight - scrollPos <= 45) {
-                cozyPaginationDock.classList.add('dock-visible');
-            } else {
-                cozyPaginationDock.classList.remove('dock-visible');
-            }
-        }
-
-        const cacheScrollPosition = debounce(() => {
-            if (activeBeanPath) {
-                const frameWindow = coffeeMugFrame.contentWindow;
-                if (frameWindow) {
-                    localStorage.setItem(`scroll_${activeBeanPath}`, frameWindow.scrollY);
-                }
-            }
-        }, 200);
-
-        function updatePaginationControls(currentFilteredList) {
-            const listToUse = currentFilteredList || sortedBeanPaths;
-            
-            if (listToUse.length === 0 || !activeBeanPath) {
-                cozyPaginationDock.style.display = 'none';
-                return;
-            }
-            cozyPaginationDock.style.display = 'flex';
-
-            const currentIndex = listToUse.indexOf(activeBeanPath);
-            
-            if(currentIndex !== -1) {
-                cozyDockDropdown.value = activeBeanPath;
-            }
-
-            brewPrevBtn.disabled = currentIndex <= 0;
-            brewNextBtn.disabled = currentIndex === -1 || currentIndex === listToUse.length - 1;
-        }
-
-        cozyDockDropdown.addEventListener('change', (e) => {
-            if (e.target.value) {
-                pourMugSelection(e.target.value);
-            }
-        });
-
-        brewPrevBtn.addEventListener('click', () => {
-            const currentIndex = sortedBeanPaths.indexOf(activeBeanPath);
-            if (currentIndex > 0) {
-                pourMugSelection(sortedBeanPaths[currentIndex - 1]);
-            }
-        });
-
-        brewNextBtn.addEventListener('click', () => {
-            const currentIndex = sortedBeanPaths.indexOf(activeBeanPath);
-            if (currentIndex < sortedBeanPaths.length - 1) {
-                pourMugSelection(sortedBeanPaths[currentIndex + 1]);
-            }
-        });
-
-        beanSearchInput.addEventListener('input', renderCafeMenu);
-        roastSortSelect.addEventListener('change', renderCafeMenu);
-
-        init();
-    </script>
-</body>
-</html>
+                    await
