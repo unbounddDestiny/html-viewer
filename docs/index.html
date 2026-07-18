@@ -319,7 +319,7 @@
                         <svg class="w-3 h-3 collapse-arrow transform" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                         <span class="text-xs font-bold tracking-wide uppercase opacity-75">History</span>
                     </div>
-                    <button id="clear-history-btn" class="text-[11px] text-muted hover:text-[var(--accent)] transition-colorsstopPropagation">Clear</button>
+                    <button id="clear-history-btn" class="text-[11px] text-muted hover:text-[var(--accent)] transition-colors">Clear</button>
                 </div>
                 <div id="history-content" class="hidden px-3 pb-3 max-h-[160px] overflow-y-auto space-y-1 text-xs border-t border-theme/30 pt-2">
                     <div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>
@@ -364,7 +364,7 @@
             <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 z-0 select-none">
                 <div class="text-5xl mb-4 animate-bounce">☕</div>
                 <h2 class="text-xl font-semibold mb-1 text-empty-mug">Your coffee mug is empty</h2>
-                <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
+                <p class="text-sm text-muted max-w-xs">Load a zip archive holding HTML files to fill up your layout view.</p>
             </div>
 
             <div id="run-id-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 select-none">
@@ -426,7 +426,6 @@
         const historyWrapper = document.getElementById('history-wrapper');
         const historyHeaderTrigger = document.getElementById('history-header-trigger');
         const historyContent = document.getElementById('history-content');
-        const readingHistoryList = document.getElementById('history-content');
         const clearHistoryBtn = document.getElementById('clear-history-btn');
 
         const brewLoaderOverlay = document.getElementById('brew-loader-overlay');
@@ -459,11 +458,10 @@
 
         let groundBeansMap = {};
         let sortedBeanPaths = [];
-        let currentlyRenderedList = []; 
         let activeBeanPath = null;
         let isSidebarOpen = false; 
         let readingHistoryArray = [];
-        let activeZipHash = "default_zip"; // Holds cryptographic identity signature of open archive bundle
+        let activeZipHash = "default_zip";
 
         function debounce(fn, delay) {
             let timeoutId;
@@ -473,16 +471,72 @@
             };
         }
 
-        // Fast hash identifier generator for incoming files
         async function computeBlobHash(blob) {
             try {
-                const buffer = await blob.slice(0, 1024 * 50).arrayBuffer(); // sample first 50KB for rapid fingerprinting
+                const buffer = await blob.slice(0, 1024 * 50).arrayBuffer();
                 const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
                 const hashArray = Array.from(new Uint8Array(hashBuffer));
                 return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
             } catch(e) {
                 return "fallback_" + blob.size;
             }
+        }
+
+        // --- NEW ASSET DOWNLOADER & OFFLINE EMBEDDER ENGINE ---
+        async function fetchAndCacheAsset(url) {
+            const cacheKey = `asset_${btoa(url).replace(/=/g, '')}`;
+            try {
+                // Check localForage cache first
+                const cached = await localforage.getItem(cacheKey);
+                if (cached) return cached;
+
+                // Download if network available
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Network status invalid");
+                
+                const blob = await response.blob();
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = async () => {
+                        const base64data = reader.result;
+                        await localforage.setItem(cacheKey, base64data).catch(() => {});
+                        resolve(base64data);
+                    };
+                    reader.readAsDataURL(blob);
+                });
+            } catch (e) {
+                console.warn(`Failed offline cache pipeline for asset: ${url}`, e);
+                return url; // Safe fallback path back to standard online address
+            }
+        }
+
+        async function processOnlineAssetsOffline(htmlString) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlString, 'text/html');
+            const images = doc.querySelectorAll('img[src^="http"]');
+            const stylesheets = doc.querySelectorAll('link[rel="stylesheet"][href^="http"]');
+            
+            // Process stylesheets
+            for (let link of stylesheets) {
+                const dataUrl = await fetchAndCacheAsset(link.href);
+                if (dataUrl.startsWith('data:')) {
+                    const styleTag = doc.createElement('style');
+                    try {
+                        const res = await fetch(dataUrl);
+                        styleTag.textContent = await res.text();
+                        link.replaceWith(styleTag);
+                    } catch(err) {
+                        link.href = dataUrl;
+                    }
+                }
+            }
+
+            // Process Images
+            for (let img of images) {
+                img.src = await fetchAndCacheAsset(img.src);
+            }
+
+            return doc.documentElement.outerHTML;
         }
 
         async function init() {
@@ -497,9 +551,7 @@
 
             try {
                 const preservedHistory = localStorage.getItem('cozy_reading_history');
-                if(preservedHistory) {
-                    readingHistoryArray = JSON.parse(preservedHistory);
-                }
+                if(preservedHistory) readingHistoryArray = JSON.parse(preservedHistory);
             } catch(e) { readingHistoryArray = []; }
             renderHistoryView();
 
@@ -547,42 +599,192 @@
             try {
                 const metaUrl = `${BACKEND_ENDPOINT}?action=getArtifact&runId=${runId}`;
                 const metaRes = await fetch(metaUrl);
-
-                if(!metaRes.ok) {
-                    const errorJson = await metaRes.json().catch(() => ({}));
-                    if (metaRes.status === 401 && errorJson.debug) {
-                        console.error("Val Town Security Context:", errorJson.debug);
-                        throw new Error(`Unauthorized (401). Browser sent referer: "${errorJson.debug.receivedReferer}"`);
-                    }
-                    throw new Error(`Artifact layout metadata request failed with status: ${metaRes.status}`);
-                }
+                if(!metaRes.ok) throw new Error(`Metadata failed with status: ${metaRes.status}`);
                 
                 const metaData = await metaRes.json();
-                if(!metaData.artifactId) {
-                    throw new Error("No artifact matching the name 'all-snapshots' was found inside that Run ID build pipeline.");
-                }
+                if(!metaData.artifactId) throw new Error("No artifact matching 'all-snapshots' found.");
 
                 brewPercentageLabel.textContent = 'Brewing file stream...';
                 const fileUrl = `${BACKEND_ENDPOINT}?action=downloadArtifact&artifactId=${metaData.artifactId}`;
                 const fileRes = await fetch(fileUrl);
-
                 if(!fileRes.ok) throw new Error(`File download failed: status ${fileRes.status}`);
-                const zipBlob = await fileRes.blob();
                 
+                const zipBlob = await fileRes.blob();
                 activeZipHash = await computeBlobHash(zipBlob);
 
-                try {
-                    await localforage.setItem('cached_zip', zipBlob);
-                } catch (e) {}
-
+                try { await localforage.setItem('cached_zip', zipBlob); } catch (e) {}
                 await processCoffeeZip(zipBlob);
-
             } catch(err) {
                 alert(`Brewing Error: ${err.message}`);
                 machineWrapper.classList.remove('brewing');
                 brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
             }
         }
+
+        async function processCoffeeZip(blob) {
+            brewProgressBar.style.width = '10%';
+            carafeFluid.style.height = '10%';
+            brewPercentageLabel.textContent = 'Unlocking beans...';
+            machineWrapper.classList.add('brewing');
+            brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
+
+            try {
+                const zip = await JSZip.loadAsync(blob);
+                groundBeansMap = {};
+                const files = Object.keys(zip.files).filter(path => path.endsWith('.html') && !path.startsWith('__MACOSX/'));
+                const totalFiles = files.length;
+
+                for(let i=0; i < totalFiles; i++) {
+                    const path = files[i];
+                    let htmlText = await zip.files[path].async('string');
+                    
+                    // Offline injection optimization
+                    htmlText = await processOnlineAssetsOffline(htmlText);
+                    
+                    groundBeansMap[path] = htmlText;
+                    const pct = Math.round(((i + 1) / totalFiles) * 80) + 10;
+                    brewProgressBar.style.width = `${pct}%`;
+                    carafeFluid.style.height = `${pct}%`;
+                    brewPercentageLabel.textContent = `Grinding definitions: ${Math.round(((i+1)/totalFiles)*100)}%`;
+                }
+
+                sortedBeanPaths = Object.keys(groundBeansMap).sort((a,b)=> a.localeCompare(b, undefined, {numeric:true}));
+                
+                brewProgressBar.style.width = '100%';
+                carafeFluid.style.height = '100%';
+                brewPercentageLabel.textContent = 'Serving complete!';
+
+                setTimeout(() => {
+                    machineWrapper.classList.remove('brewing');
+                    brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
+                    if(sortedBeanPaths.length > 0) {
+                        emptyMugState.classList.add('hidden');
+                        coffeeMugFrame.classList.remove('hidden');
+                        unloadZipBtn.classList.remove('hidden');
+                        renderCafeMenu();
+                        pourIntoMug(sortedBeanPaths[0]);
+                    } else {
+                        alert("No viewable layout files inside this package profile.");
+                    }
+                }, 400);
+
+            } catch(err) {
+                alert("Failed grinding archive structure payload profile: " + err.message);
+                machineWrapper.classList.remove('brewing');
+                brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
+            }
+        }
+
+        function renderCafeMenu() {
+            brewedItemsList.innerHTML = '';
+            const searchStr = beanSearchInput.value.toLowerCase().trim();
+            let matches = sortedBeanPaths.filter(p => p.toLowerCase().includes(searchStr));
+
+            if(roastSortSelect.value === 'desc') matches.reverse();
+
+            if(matches.length === 0) {
+                brewedItemsList.innerHTML = `<div class="text-center py-6 text-xs text-muted">No items match your roast query.</div>`;
+                return;
+            }
+
+            matches.forEach(path => {
+                const itemBtn = document.createElement('button');
+                itemBtn.className = `w-full text-left px-3 py-2 rounded text-xs truncate transition-all duration-150 ${path === activeBeanPath ? 'bg-accent font-bold text-stone-900' : 'hover:bg-black/5 dark:hover:bg-white/5'}`;
+                itemBtn.textContent = path;
+                itemBtn.title = path;
+                itemBtn.addEventListener('click', () => {
+                    pourIntoMug(path);
+                    if(window.innerWidth < 768) toggleSidebarLayout(false);
+                });
+                brewedItemsList.appendChild(itemBtn);
+            });
+
+            cozyDockDropdown.innerHTML = '';
+            sortedBeanPaths.forEach(path => {
+                const opt = document.createElement('option');
+                opt.value = path;
+                opt.textContent = path.split('/').pop();
+                opt.selected = (path === activeBeanPath);
+                cozyDockDropdown.appendChild(opt);
+            });
+        }
+
+        async function pourIntoMug(path) {
+            if(!groundBeansMap[path]) return;
+            activeBeanPath = path;
+            
+            coffeeMugFrame.srcdoc = groundBeansMap[path];
+            cozyPaginationDock.classList.add('dock-visible');
+            
+            document.querySelectorAll('#brewed-items-list button').forEach(btn => {
+                if(btn.title === path) {
+                    btn.className = "w-full text-left px-3 py-2 rounded text-xs truncate transition-all duration-150 bg-accent font-bold text-stone-900";
+                } else {
+                    btn.className = "w-full text-left px-3 py-2 rounded text-xs truncate transition-all duration-150 hover:bg-black/5 dark:hover:bg-white/5";
+                }
+            });
+
+            Array.from(cozyDockDropdown.options).forEach(opt => opt.selected = (opt.value === path));
+            updatePaginationControls();
+
+            readingHistoryArray = readingHistoryArray.filter(item => !(item.path === path && item.zipId === activeZipHash));
+            readingHistoryArray.unshift({ path, zipId: activeZipHash, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})});
+            if(readingHistoryArray.length > 20) readingHistoryArray.pop();
+            
+            localStorage.setItem('cozy_reading_history', JSON.stringify(readingHistoryArray));
+            renderHistoryView();
+        }
+
+        function updatePaginationControls() {
+            const idx = sortedBeanPaths.indexOf(activeBeanPath);
+            brewPrevBtn.disabled = (idx <= 0);
+            brewNextBtn.disabled = (idx >= sortedBeanPaths.length - 1 || idx === -1);
+        }
+
+        function renderHistoryView() {
+            readingHistoryList.innerHTML = '';
+            const scopeItems = readingHistoryArray.filter(i => i.zipId === activeZipHash);
+            if(scopeItems.length === 0) {
+                readingHistoryList.innerHTML = `<div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>`;
+                return;
+            }
+            scopeItems.forEach(item => {
+                const div = document.createElement('div');
+                div.className = "flex justify-between items-center p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer truncate transition-colors";
+                div.innerHTML = `<span class="truncate font-medium flex-1 pr-2" title="${item.path}">${item.path.split('/').pop()}</span><span class="text-[10px] opacity-50 shrink-0">${item.time}</span>`;
+                div.addEventListener('click', () => pourIntoMug(item.path));
+                readingHistoryList.appendChild(div);
+            });
+        }
+
+        coffeeZipInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            activeZipHash = await computeBlobHash(file);
+            await processCoffeeZip(file);
+        });
+
+        brewPrevBtn.addEventListener('click', () => {
+            const idx = sortedBeanPaths.indexOf(activeBeanPath);
+            if(idx > 0) pourIntoMug(sortedBeanPaths[idx - 1]);
+        });
+
+        brewNextBtn.addEventListener('click', () => {
+            const idx = sortedBeanPaths.indexOf(activeBeanPath);
+            if(idx !== -1 && idx < sortedBeanPaths.length - 1) pourIntoMug(sortedBeanPaths[idx + 1]);
+        });
+
+        cozyDockDropdown.addEventListener('change', (e) => pourIntoMug(e.target.value));
+        beanSearchInput.addEventListener('input', debounce(renderCafeMenu, 150));
+        roastSortSelect.addEventListener('change', renderCafeMenu);
+
+        clearHistoryBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if(!confirm("Dump your history logs?")) return;
+            readingHistoryArray = readingHistoryArray.filter(i => i.zipId !== activeZipHash);
+            localStorage.setItem('cozy_reading_history', JSON.stringify(readingHistoryArray));
+            renderHistoryView();
+        });
 
         historyHeaderTrigger.addEventListener('click', (e) => {
             if (e.target === clearHistoryBtn) return;
@@ -598,28 +800,37 @@
 
         unloadZipBtn.addEventListener('click', async () => {
             if (!confirm("Are you sure you want to unload the current archive file?")) return;
-            
-            groundBeansMap = {};
-            sortedBeanPaths = [];
-            currentlyRenderedList = [];
-            activeBeanPath = null;
-            
+            groundBeansMap = {}; sortedBeanPaths = []; activeBeanPath = null;
             await localforage.removeItem('cached_zip');
-            
             coffeeMugFrame.srcdoc = "";
             coffeeMugFrame.classList.add('hidden');
             emptyMugState.classList.remove('hidden');
             unloadZipBtn.classList.add('hidden');
-            
+            cozyPaginationDock.classList.remove('dock-visible');
             renderCafeMenu();
-            updatePaginationControls();
+            renderHistoryView();
         });
+
+        function toggleSidebarLayout(forceState) {
+            isSidebarOpen = (forceState !== undefined) ? forceState : !isSidebarOpen;
+            if(isSidebarOpen) {
+                cafeMenuSidebar.classList.add('sidebar-open');
+                cafeApronOverlay.classList.remove('pointer-events-none', 'opacity-0');
+                baristaMenuToggle.setAttribute('aria-expanded', 'true');
+            } else {
+                cafeMenuSidebar.classList.remove('sidebar-open');
+                cafeApronOverlay.classList.add('pointer-events-none', 'opacity-0');
+                baristaMenuToggle.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        baristaMenuToggle.addEventListener('click', () => toggleSidebarLayout());
+        cafeApronOverlay.addEventListener('click', () => toggleSidebarLayout(false));
 
         function splashMugColor() {
             try {
                 const frameDoc = coffeeMugFrame.contentDocument || coffeeMugFrame.contentWindow.document;
                 if (!frameDoc || !frameDoc.body) return;
-
                 const targetBg = getComputedStyle(document.body).getPropertyValue('--bg-base').trim();
                 const targetText = getComputedStyle(document.body).getPropertyValue('--text-main').trim();
 
@@ -629,7 +840,6 @@
                     styleTag.id = 'mug-theme-override';
                     frameDoc.head.appendChild(styleTag);
                 }
-
                 styleTag.textContent = `
                     body, html, #page, .wrapper, main, div, p, span, section, article { 
                         background-color: ${targetBg} !important; 
@@ -640,342 +850,16 @@
         }
 
         mugStyleToggle.addEventListener('click', () => {
-            const isDark = document.documentElement.classList.contains('theme-dark') ||
-                           (!document.documentElement.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-            const nextTheme = isDark ? 'light' : 'dark';
-            document.documentElement.className = `theme-${nextTheme}`;
-            localStorage.setItem('theme', nextTheme);
-            splashMugColor();
+            const isDark = document.documentElement.classList.contains('theme-dark');
+            const targetTheme = isDark ? 'light' : 'dark';
+            document.documentElement.className = `theme-${targetTheme}`;
+            localStorage.setItem('theme', targetTheme);
+            setTimeout(splashMugColor, 50);
         });
 
-        function toggleSidebarState() {
-            isSidebarOpen = !isSidebarOpen;
-            baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
+        coffeeMugFrame.addEventListener('load', splashMugColor);
 
-            if (isSidebarOpen) {
-                cafeMenuSidebar.classList.add('sidebar-open');
-                if (window.innerWidth < 768) {
-                    cafeApronOverlay.classList.remove('opacity-0', 'pointer-events-none');
-                    cafeApronOverlay.classList.add('opacity-100', 'pointer-events-auto');
-                }
-            } else {
-                cafeMenuSidebar.classList.remove('sidebar-open');
-                cafeApronOverlay.classList.remove('opacity-100', 'pointer-events-auto');
-                cafeApronOverlay.classList.add('opacity-0', 'pointer-events-none');
-            }
-
-            window.dispatchEvent(new Event('resize'));
-        }
-
-        baristaMenuToggle.addEventListener('click', () => toggleSidebarState());
-        cafeApronOverlay.addEventListener('click', () => toggleSidebarState());
-
-        coffeeZipInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            activeZipHash = await computeBlobHash(file);
-            try {
-                await localforage.setItem('cached_zip', file);
-            } catch (err) {}
-            await processCoffeeZip(file);
-        });
-
-        async function processCoffeeZip(file) {
-            const randomFact = funFacts[Math.floor(Math.random() * funFacts.length)];
-            brewFunFact.textContent = randomFact;
-
-            brewProgressBar.style.width = '0%';
-            carafeFluid.style.height = '0%';
-            brewPercentageLabel.textContent = '0% grounded';
-            
-            machineWrapper.classList.add('brewing');
-            brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
-
-            try {
-                const zip = await JSZip.loadAsync(file);
-                groundBeansMap = {};
-                sortedBeanPaths = [];
-
-                const totalEntries = Object.keys(zip.files).length;
-                let currentProcessed = 0;
-
-                for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
-                    currentProcessed++;
-                    if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.html')) {
-                        groundBeansMap[relativePath] = zipEntry;
-                        sortedBeanPaths.push(relativePath);
-                    }
-                    
-                    const progressPercent = Math.round((currentProcessed / totalEntries) * 100);
-                    brewProgressBar.style.width = `${progressPercent}%`;
-                    carafeFluid.style.height = `${progressPercent}%`;
-                    brewPercentageLabel.textContent = `${progressPercent}% grounded`;
-
-                    if(currentProcessed % 20 === 0) {
-                        await new Promise(r => setTimeout(r, 0));
-                    }
-                }
-
-                unloadZipBtn.classList.remove('hidden');
-                renderCafeMenu();
-
-                // Look up last viewed file record tied specifically to this archive package file hash signature
-                const lastBrewForThisZip = localStorage.getItem(`last_path_${activeZipHash}`);
-                if (lastBrewForThisZip && groundBeansMap[lastBrewForThisZip]) {
-                    await pourMugSelection(lastBrewForThisZip, true);
-                } else if (currentlyRenderedList.length > 0) {
-                    await pourMugSelection(currentlyRenderedList[0]);
-                }
-
-            } catch (err) {
-                alert("Coffee package failed to pour: " + err.message);
-            } finally {
-                machineWrapper.classList.remove('brewing');
-                setTimeout(() => {
-                    brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
-                }, 400);
-            }
-        }
-
-        function renderCafeMenu() {
-            const query = beanSearchInput.value.toLowerCase();
-            const sortOrder = roastSortSelect.value;
-
-            currentlyRenderedList = sortedBeanPaths.filter(path => {
-                const filename = path.split('/').pop();
-                return filename.toLowerCase().includes(query);
-            });
-
-            currentlyRenderedList.sort((a, b) => {
-                const nameA = a.split('/').pop();
-                const nameB = b.split('/').pop();
-                return sortOrder === 'asc'
-                    ? nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
-                    : nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
-            });
-
-            cozyDockDropdown.innerHTML = '';
-            currentlyRenderedList.forEach((path, index) => {
-                const option = document.createElement('option');
-                option.value = path;
-                option.textContent = `Blend ${index + 1} of ${currentlyRenderedList.length}`;
-                cozyDockDropdown.appendChild(option);
-            });
-
-            if (currentlyRenderedList.length === 0) {
-                brewedItemsList.innerHTML = `<div class="text-center py-8 text-sm text-muted">No café items match your blend search.</div>`;
-                return;
-            }
-
-            brewedItemsList.innerHTML = '';
-            currentlyRenderedList.forEach(path => {
-                const filename = path.split('/').pop();
-                const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
-
-                const button = document.createElement('button');
-                button.className = `w-full text-left p-3 rounded-lg border transition-all duration-200 text-sm flex flex-col gap-1 ${
-                    activeBeanPath === path
-                        ? 'bg-accent text-stone-900 font-semibold border-transparent shadow-sm scale-[0.99]'
-                        : 'bg-surface border-theme hover:opacity-90 active:scale-[0.98]'
-                }`;
-
-                button.innerHTML = `
-                    <span class="truncate w-full">${filename}</span>
-                    ${folderPath ? `<span class="text-[10px] opacity-70 truncate w-full">${folderPath}</span>` : ''}
-                `;
-
-                button.addEventListener('click', () => {
-                    pourMugSelection(path);
-                    if (window.innerWidth < 768) {
-                        toggleSidebarState();
-                    }
-                });
-
-                brewedItemsList.appendChild(button);
-            });
-
-            updatePaginationControls();
-        }
-
-        function appendHistoryTrack(path) {
-            if(!path) return;
-            readingHistoryArray = readingHistoryArray.filter(item => item !== path);
-            readingHistoryArray.unshift(path);
-
-            if(readingHistoryArray.length > 35) {
-                readingHistoryArray.pop();
-            }
-
-            localStorage.setItem('cozy_reading_history', JSON.stringify(readingHistoryArray));
-            renderHistoryView();
-        }
-
-        function renderHistoryView() {
-            if(readingHistoryArray.length === 0) {
-                readingHistoryList.innerHTML = `<div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>`;
-                return;
-            }
-
-            readingHistoryList.innerHTML = '';
-            readingHistoryArray.forEach(path => {
-                const filename = path.split('/').pop();
-                const itemBtn = document.createElement('button');
-                itemBtn.className = "w-full text-left px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/5 truncate block text-muted hover:text-[var(--text-main)] transition-colors";
-                itemBtn.textContent = filename;
-                itemBtn.title = path;
-                itemBtn.addEventListener('click', () => {
-                    if(groundBeansMap[path]) {
-                        pourMugSelection(path);
-                    } else {
-                        alert("This blend link is no longer available in the currently parsed package.");
-                    }
-                });
-                readingHistoryList.appendChild(itemBtn);
-            });
-        }
-
-        clearHistoryBtn.addEventListener('click', () => {
-            readingHistoryArray = [];
-            localStorage.removeItem('cozy_reading_history');
-            renderHistoryView();
-        });
-
-        async function pourMugSelection(path, restoreScrollPosition = false) {
-            activeBeanPath = path;
-            
-            // Save active path bound exclusively to this active file fingerprint map
-            localStorage.setItem(`last_path_${activeZipHash}`, path);
-
-            appendHistoryTrack(path);
-            renderCafeMenu();
-
-            const entry = groundBeansMap[path];
-            if (!entry) return;
-
-            let htmlContent = await entry.async('string');
-
-            try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(htmlContent, 'text/html');
-                const images = doc.querySelectorAll('img');
-
-                images.forEach(img => {
-                    let embeddedBase64 = null;
-                    for (const attr of img.attributes) {
-                        if (attr.value.startsWith('data:image/')) {
-                            if (attr.name !== 'src' || !embeddedBase64) {
-                                embeddedBase64 = attr.value;
-                            }
-                        }
-                    }
-                    if (embeddedBase64) {
-                        img.setAttribute('src', embeddedBase64);
-                        img.removeAttribute('loading');
-                        img.classList.remove('lazyload', 'lazy');
-                    }
-                });
-
-                htmlContent = doc.documentElement.outerHTML;
-            } catch (e) {}
-
-            emptyMugState.classList.add('hidden');
-            coffeeMugFrame.classList.remove('hidden');
-            coffeeMugFrame.srcdoc = htmlContent;
-
-            coffeeMugFrame.onload = () => {
-                const frameWindow = coffeeMugFrame.contentWindow;
-                splashMugColor();
-                cozyPaginationDock.classList.remove('dock-visible');
-
-                if (restoreScrollPosition) {
-                    // Extract unique compound key lookup: zipHash + item path link layout
-                    const savedScroll = localStorage.getItem(`scroll_${activeZipHash}_${path}`);
-                    if (savedScroll) {
-                        const targetScroll = parseFloat(savedScroll);
-                        let attempts = 0;
-                        const scrollInterval = setInterval(() => {
-                            frameWindow.scrollTo(0, targetScroll);
-                            attempts++;
-                            if (attempts > 10 || frameWindow.scrollY === targetScroll) {
-                                clearInterval(scrollInterval);
-                            }
-                        }, 50);
-                    }
-                }
-
-                frameWindow.removeEventListener('scroll', handleFrameScroll);
-                frameWindow.addEventListener('scroll', handleFrameScroll);
-            };
-        }
-
-        function handleFrameScroll() {
-            cacheScrollPosition();
-
-            const win = coffeeMugFrame.contentWindow;
-            if (!win) return;
-
-            const docElem = win.document.documentElement;
-            const totalHeight = docElem.scrollHeight;
-            const scrollPos = win.scrollY + win.innerHeight;
-
-            if (totalHeight - scrollPos <= 45) {
-                cozyPaginationDock.classList.add('dock-visible');
-            } else {
-                cozyPaginationDock.classList.remove('dock-visible');
-            }
-        }
-
-        const cacheScrollPosition = debounce(() => {
-            if (activeBeanPath && activeZipHash) {
-                const frameWindow = coffeeMugFrame.contentWindow;
-                if (frameWindow) {
-                    localStorage.setItem(`scroll_${activeZipHash}_${activeBeanPath}`, frameWindow.scrollY);
-                }
-            }
-        }, 200);
-
-        function updatePaginationControls() {
-            if (currentlyRenderedList.length === 0 || !activeBeanPath) {
-                cozyPaginationDock.style.display = 'none';
-                return;
-            }
-            cozyPaginationDock.style.display = 'flex';
-
-            const currentIndex = currentlyRenderedList.indexOf(activeBeanPath);
-            if(currentIndex !== -1) {
-                cozyDockDropdown.value = activeBeanPath;
-            }
-
-            brewPrevBtn.disabled = currentIndex <= 0;
-            brewNextBtn.disabled = currentIndex === -1 || currentIndex === currentlyRenderedList.length - 1;
-        }
-
-        cozyDockDropdown.addEventListener('change', (e) => {
-            if (e.target.value) {
-                pourMugSelection(e.target.value);
-            }
-        });
-
-        brewPrevBtn.addEventListener('click', () => {
-            const currentIndex = currentlyRenderedList.indexOf(activeBeanPath);
-            if (currentIndex > 0) {
-                pourMugSelection(currentlyRenderedList[currentIndex - 1]);
-            }
-        });
-
-        brewNextBtn.addEventListener('click', () => {
-            const currentIndex = currentlyRenderedList.indexOf(activeBeanPath);
-            if (currentIndex !== -1 && currentIndex < currentlyRenderedList.length - 1) {
-                pourMugSelection(currentlyRenderedList[currentIndex + 1]);
-            }
-        });
-
-        beanSearchInput.addEventListener('input', renderCafeMenu);
-        roastSortSelect.addEventListener('change', renderCafeMenu);
-
-        init();
+        window.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
