@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>☕ Cozy Brews Archive Viewer</title>
+    <title>Cozy Brews Archive Viewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
@@ -143,6 +143,14 @@
         html.theme-dark #cozy-dock-dropdown {
             background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23e0def4' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/></svg>");
         }
+
+        /* Rotatable indicator for collapsible headers */
+        .collapse-arrow {
+            transition: transform 0.2s ease;
+        }
+        .collapsed .collapse-arrow {
+            transform: rotate(-90deg);
+        }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col overflow-hidden select-none">
@@ -157,7 +165,10 @@
 
         <div class="flex items-center space-x-2">
             <button id="mug-style-toggle" class="p-2 rounded bg-sidebar border border-theme text-sm active:scale-95 transition-transform">
-                ☕ Mug Style
+                Mug Style
+            </button>
+            <button id="unload-zip-btn" class="p-2 rounded bg-sidebar border border-theme text-sm text-stone-500 hover:text-[var(--accent)] active:scale-95 transition-all hidden" title="Unload File Archive">
+                Empty Cup
             </button>
             <label class="px-3 py-1.5 rounded bg-accent text-xs md:text-sm font-semibold text-stone-900 cursor-pointer shadow-sm hover:opacity-90 active:scale-95 transition-transform duration-200">
                 Pour New Zip
@@ -168,7 +179,7 @@
 
     <div class="flex-1 flex relative overflow-hidden w-full">
 
-        <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 will-change-transform flex flex-col md:relative h-full">
+         <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 will-change-transform flex flex-col md:relative h-full">
             <div class="p-3 border-b border-theme space-y-2 shrink-0">
                 <input type="text" id="bean-search-input" placeholder="Search menu items..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all">
                 <div class="flex justify-between items-center text-xs">
@@ -184,12 +195,15 @@
                 <div class="text-center py-8 text-sm text-muted">No beans ground yet. Pour a zip to begin brewing.</div>
             </div>
 
-            <div class="border-t border-theme p-3 bg-surface/40 flex flex-col max-h-[220px] shrink-0">
-                <div class="flex justify-between items-center mb-1.5 px-1">
-                    <span class="text-xs font-bold tracking-wide uppercase opacity-75">History</span>
-                    <button id="clear-history-btn" class="text-[11px] text-muted hover:text-[var(--accent)] transition-colors">Clear</button>
+            <div id="history-wrapper" class="border-t border-theme bg-surface/40 flex flex-col shrink-0 collapsed">
+                <div id="history-header-trigger" class="flex justify-between items-center p-3 cursor-pointer select-none hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-3 h-3 collapse-arrow transform" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                        <span class="text-xs font-bold tracking-wide uppercase opacity-75">History</span>
+                    </div>
+                    <button id="clear-history-btn" class="text-[11px] text-muted hover:text-[var(--accent)] transition-colorsstopPropagation">Clear</button>
                 </div>
-                <div id="reading-history-list" class="flex-1 overflow-y-auto space-y-1 pr-1 text-xs">
+                <div id="history-content" class="hidden px-3 pb-3 max-h-[160px] overflow-y-auto space-y-1 text-xs border-t border-theme/30 pt-2">
                     <div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>
                 </div>
             </div>
@@ -239,12 +253,17 @@
         const beanSearchInput = document.getElementById('bean-search-input');
         const roastSortSelect = document.getElementById('roast-sort-select');
         const mugStyleToggle = document.getElementById('mug-style-toggle');
+        const unloadZipBtn = document.getElementById('unload-zip-btn');
         
         const cozyPaginationDock = document.getElementById('cozy-pagination-dock');
         const brewPrevBtn = document.getElementById('brew-prev-btn');
         const brewNextBtn = document.getElementById('brew-next-btn');
         const cozyDockDropdown = document.getElementById('cozy-dock-dropdown');
-        const readingHistoryList = document.getElementById('reading-history-list');
+        
+        const historyWrapper = document.getElementById('history-wrapper');
+        const historyHeaderTrigger = document.getElementById('history-header-trigger');
+        const historyContent = document.getElementById('history-content');
+        const readingHistoryList = document.getElementById('history-content');
         const clearHistoryBtn = document.getElementById('clear-history-btn');
 
         let groundBeansMap = {};
@@ -289,6 +308,40 @@
                 console.error(err);
             }
         }
+
+        // Toggle collapsible history panel view
+        historyHeaderTrigger.addEventListener('click', (e) => {
+            if (e.target === clearHistoryBtn) return; // Ignore clear buttons clicks
+            const isCollapsed = historyWrapper.classList.contains('collapsed');
+            if (isCollapsed) {
+                historyWrapper.classList.remove('collapsed');
+                historyContent.classList.remove('hidden');
+            } else {
+                historyWrapper.classList.add('collapsed');
+                historyContent.classList.add('hidden');
+            }
+        });
+
+        // Unload Complete Package logic handler
+        unloadZipBtn.addEventListener('click', async () => {
+            if (!confirm("Are you sure you want to unload the current archive file?")) return;
+            
+            groundBeansMap = {};
+            sortedBeanPaths = [];
+            currentlyRenderedList = [];
+            activeBeanPath = null;
+            
+            localStorage.removeItem('last_active_path');
+            await localforage.removeItem('cached_zip');
+            
+            coffeeMugFrame.srcdoc = "";
+            coffeeMugFrame.classList.add('hidden');
+            emptyMugState.classList.remove('hidden');
+            unloadZipBtn.classList.add('hidden');
+            
+            renderCafeMenu();
+            updatePaginationControls();
+        });
 
         function splashMugColor() {
             try {
@@ -371,6 +424,7 @@
                     }
                 });
 
+                unloadZipBtn.classList.remove('hidden');
                 renderCafeMenu();
 
                 const lastBrew = localStorage.getItem('last_active_path');
