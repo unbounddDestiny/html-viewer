@@ -11,7 +11,6 @@
     <style>
         /* Lofi Coffee Theme Definitions */
         :root {
-            /* Light Theme: Roasted Espresso / Oatmeal Cream */
             --bg-base: #f4edd8;
             --bg-surface: #eae0c8;
             --bg-sidebar: #dfd5b8;
@@ -24,7 +23,6 @@
 
         @media (prefers-color-scheme: dark) {
             :root {
-                /* Dark Theme: Midnight Brew / Cozy Café Dusk */
                 --bg-base: #1e1d2f;
                 --bg-surface: #252438;
                 --bg-sidebar: #191826;
@@ -36,7 +34,6 @@
             }
         }
 
-        /* Manual class overrides for theme toggling */
         html.theme-light {
             --bg-base: #f4edd8;
             --bg-surface: #eae0c8;
@@ -64,7 +61,6 @@
             color: var(--text-main);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             transition: background-color 0.3s, color 0.3s;
-            /* Fixes native touch latency delays in iOS Safari */
             touch-action: manipulation;
         }
 
@@ -89,31 +85,40 @@
             border-radius: 4px;
         }
 
-        /*
-         * Sidebar slide state, defined as real CSS rather than toggled Tailwind
-         * utility classes (previously -translate-x-full / translate-x-0).
-         * The Tailwind CDN build generates styles by watching the DOM and adding
-         * rules for class names as it sees them. Utility classes already present
-         * in the markup at load time are fine, but a class added for the first
-         * time purely at runtime (which is what a JS-driven toggle does) can
-         * race that generation step - most visible on iOS Safari, where the
-         * first tap can appear to do nothing. Defining the two states directly
-         * here means the rule exists from first paint, no race possible.
-         */
+        /* Interactive Sidebar Fixes for WebKit iOS & Orion */
+        #barista-menu-toggle {
+            cursor: pointer;
+            position: relative;
+            z-index: 50 !important;
+            -webkit-user-select: auto !important;
+            user-select: auto !important;
+        }
+
+        /* Mobile Slide Over Defaults */
         #cafe-menu-sidebar {
+            -webkit-transform: translateX(-100%);
             transform: translateX(-100%);
+            transition: -webkit-transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         #cafe-menu-sidebar.sidebar-open {
+            -webkit-transform: translateX(0);
             transform: translateX(0);
         }
+
+        /* Desktop Structural Layout management */
         @media (min-width: 768px) {
             #cafe-menu-sidebar {
-                transform: translateX(0);
+                -webkit-transform: translateX(0) !important;
+                transform: translateX(0) !important;
+                transition: none !important;
+            }
+            #cafe-menu-sidebar:not(.sidebar-open) {
+                display: none !important;
             }
         }
     </style>
 </head>
-<body class="h-screen w-screen flex flex-col overflow-hidden select-none">
+<body class="h-screen w-screen flex flex-col overflow-hidden">
 
     <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30">
         <div class="flex items-center space-x-3">
@@ -136,7 +141,7 @@
 
     <div class="flex-1 flex relative overflow-hidden">
 
-        <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transition-transform duration-300 will-change-transform flex flex-col md:relative">
+        <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 will-change-transform flex flex-col md:relative">
             <div class="p-3 border-b border-theme space-y-2">
                 <input type="text" id="bean-search-input" placeholder="Search menu items..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)]">
                 <div class="flex justify-between items-center text-xs">
@@ -184,9 +189,6 @@
         let activeBeanPath = null;
         let isSidebarOpen = false;
 
-        // Small helper: delays invoking fn until `delay` ms have passed since the
-        // last call. Used to keep scroll-position caching off the main thread's
-        // critical path during an active scroll gesture.
         function debounce(fn, delay) {
             let timeoutId;
             return (...args) => {
@@ -197,29 +199,29 @@
 
         // Initialize Cafe Viewport Layout
         async function init() {
-            // Screen Breakpoint Check for initial setup
+            console.log("[Debug] Initializing view state. Screen Width:", window.innerWidth);
             isSidebarOpen = window.innerWidth >= 768;
+            
             cafeMenuSidebar.classList.toggle('sidebar-open', isSidebarOpen);
             baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
 
-            // Restore Custom Lofi Mug Theme
             const savedStyle = localStorage.getItem('theme');
             if (savedStyle) {
                 document.documentElement.className = `theme-${savedStyle}`;
+                console.log("[Debug] Restored theme from cache:", savedStyle);
             }
 
-            // Load Saved Beans from IndexedDB
             try {
                 const cachedBeans = await localforage.getItem('cached_zip');
                 if (cachedBeans) {
+                    console.log("[Debug] Found cached zip in LocalForage, processing...");
                     await processCoffeeZip(cachedBeans);
                 }
             } catch (err) {
-                console.error("IndexedDB couldn't retrieve ground coffee archive:", err);
+                console.error("[Debug Error] IndexedDB couldn't retrieve archive:", err);
             }
         }
 
-        // Apply theme color styling matches deep into the active iframe page instance
         function splashMugColor() {
             try {
                 const frameDoc = coffeeMugFrame.contentDocument || coffeeMugFrame.contentWindow.document;
@@ -242,12 +244,13 @@
                     }
                 `;
             } catch (e) {
-                console.warn("Cross-origin or early load cycle stopped theme delivery.", e);
+                console.warn("[Debug] Cross-origin or early load cycle stopped theme delivery.", e);
             }
         }
 
         // Toggle Mug Visual Styles
         mugStyleToggle.addEventListener('click', () => {
+            console.log("[Debug Button] Mug Style clicked");
             const isDark = document.documentElement.classList.contains('theme-dark') ||
                            (!document.documentElement.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
@@ -256,18 +259,17 @@
             localStorage.setItem('theme', nextTheme);
 
             splashMugColor();
+            console.log("[Debug] Theme changed to:", nextTheme);
         });
 
         // Sidebar Visibility Mechanics
         function toggleSidebarState() {
             isSidebarOpen = !isSidebarOpen;
+            console.log(`[Debug Action] Toggling sidebar. Target state -> Open: ${isSidebarOpen}`);
+            
             baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
 
             if (isSidebarOpen) {
-                // Force a style recalculation before starting the transition -
-                // helps Safari reliably animate the very first time this runs.
-                void cafeMenuSidebar.offsetHeight;
-
                 cafeMenuSidebar.classList.add('sidebar-open');
                 if (window.innerWidth < 768) {
                     cafeApronOverlay.classList.remove('hidden');
@@ -276,30 +278,34 @@
                 cafeMenuSidebar.classList.remove('sidebar-open');
                 cafeApronOverlay.classList.add('hidden');
             }
+
+            // Force WebKit layouts to properly compute container changes
+            if (window.innerWidth >= 768) {
+                window.dispatchEvent(new Event('resize'));
+                console.log("[Debug] Dispatched resize reflow event for desktop WebKit engine.");
+            }
         }
 
-        // Explicit Click bindings
-        baristaMenuToggle.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        // Native Click bindings with removed restrictions for stable iOS/Orion routing
+        baristaMenuToggle.addEventListener('click', () => {
+            console.log("[Debug Button] Menu Toggle Button tapped");
             toggleSidebarState();
         });
 
-        cafeApronOverlay.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        cafeApronOverlay.addEventListener('click', () => {
+            console.log("[Debug Button] Close Menu Overlay backdrop tapped");
             toggleSidebarState();
         });
 
-        // Load new file input zip package
         coffeeZipInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            console.log("[Debug Input] New file loaded:", file.name, "Size:", file.size);
 
             try {
                 await localforage.setItem('cached_zip', file);
             } catch (err) {
-                console.warn("Local cache threshold hit. Skipping store optimization.", err);
+                console.warn("[Debug] Local cache threshold hit. Skipping store optimization.", err);
             }
 
             await processCoffeeZip(file);
@@ -319,6 +325,7 @@
                     }
                 });
 
+                console.log(`[Debug] Archive parsing finished. Found ${sortedBeanPaths.length} HTML files.`);
                 renderCafeMenu();
 
                 const lastBrew = localStorage.getItem('last_active_path');
@@ -330,7 +337,7 @@
 
             } catch (err) {
                 alert("Coffee package failed to pour: " + err.message);
-                console.error(err);
+                console.error("[Debug Error] Zip extraction cycle broken: ", err);
             }
         }
 
@@ -344,11 +351,9 @@
                 return filename.toLowerCase().includes(query);
             });
 
-            // NATURAL SORT: Manages matching numeric codes perfectly (e.g. 1, 2, 10)
             filtered.sort((a, b) => {
                 const nameA = a.split('/').pop();
                 const nameB = b.split('/').pop();
-
                 return sortOrder === 'asc'
                     ? nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
                     : nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
@@ -376,7 +381,8 @@
                     ${folderPath ? `<span class="text-[10px] opacity-70 truncate w-full">${folderPath}</span>` : ''}
                 `;
 
-                button.addEventListener('click', (e) => {
+                button.addEventListener('click', () => {
+                    console.log(`[Debug Button] Sidebar Item clicked: ${filename}`);
                     pourMugSelection(path);
                     if (window.innerWidth < 768) {
                         toggleSidebarState();
@@ -399,7 +405,6 @@
 
             let htmlContent = await entry.async('string');
 
-            // PRE-PASS FIX FOR LAZY-LOADED EMBEDDED GRAPHICS
             try {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(htmlContent, 'text/html');
@@ -407,7 +412,6 @@
 
                 images.forEach(img => {
                     let embeddedBase64 = null;
-
                     for (const attr of img.attributes) {
                         if (attr.value.startsWith('data:image/')) {
                             if (attr.name !== 'src' || !embeddedBase64) {
@@ -415,7 +419,6 @@
                             }
                         }
                     }
-
                     if (embeddedBase64) {
                         img.setAttribute('src', embeddedBase64);
                         img.removeAttribute('loading');
@@ -425,18 +428,15 @@
 
                 htmlContent = doc.documentElement.outerHTML;
             } catch (e) {
-                console.error("Graphics conversion cycle fault: ", e);
+                console.error("[Debug Error] Graphics conversion fault: ", e);
             }
 
             emptyMugState.classList.add('hidden');
             coffeeMugFrame.classList.remove('hidden');
-
             coffeeMugFrame.srcdoc = htmlContent;
 
             coffeeMugFrame.onload = () => {
                 const frameWindow = coffeeMugFrame.contentWindow;
-
-                // Align internal color theme values immediately
                 splashMugColor();
 
                 if (restoreScrollPosition) {
@@ -459,9 +459,6 @@
             };
         }
 
-        // Debounced so a scroll gesture doesn't fire a synchronous localStorage
-        // write on every single scroll event (localStorage.setItem is blocking,
-        // and that adds up fast during a fast flick, especially on iOS).
         const cacheScrollPosition = debounce(() => {
             if (activeBeanPath) {
                 const frameWindow = coffeeMugFrame.contentWindow;
