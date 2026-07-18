@@ -88,15 +88,13 @@
             cursor: pointer;
             position: relative;
             z-index: 50 !important;
-            -webkit-user-select: auto !important;
-            user-select: auto !important;
         }
 
-        /* Sidebar Animations */
+        /* Responsive Sidebar Constraints */
         #cafe-menu-sidebar {
             -webkit-transform: translateX(-100%);
             transform: translateX(-100%);
-            transition: -webkit-transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, opacity 0.3s ease;
+            transition: -webkit-transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s ease;
             opacity: 0;
         }
         #cafe-menu-sidebar.sidebar-open {
@@ -109,7 +107,7 @@
             #cafe-menu-sidebar {
                 -webkit-transform: translateX(0) !important;
                 transform: translateX(0) !important;
-                transition: width 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease !important;
+                transition: width 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s ease !important;
             }
             #cafe-menu-sidebar:not(.sidebar-open) {
                 width: 0px !important;
@@ -119,12 +117,12 @@
             }
         }
 
-        /* Dynamic Pagination Dock Animation Rules */
+        /* Floating Slide-up Navigation Dock */
         #cozy-pagination-dock {
             background-color: var(--bg-surface);
             border-color: var(--border-color);
             transform: translateY(140%);
-            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
         }
         #cozy-pagination-dock.dock-visible {
             transform: translateY(0);
@@ -136,7 +134,7 @@
             cursor: pointer;
             appearance: none;
             -webkit-appearance: none;
-            padding-right: 1.5rem;
+            padding-right: 1.25rem;
             background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%234a3e3d' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/></svg>");
             background-repeat: no-repeat;
             background-position: right center;
@@ -147,9 +145,9 @@
         }
     </style>
 </head>
-<body class="h-screen w-screen flex flex-col overflow-hidden">
+<body class="h-screen w-screen flex flex-col overflow-hidden select-none">
 
-    <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30">
+    <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30 shrink-0">
         <div class="flex items-center space-x-3">
             <button id="barista-menu-toggle" class="p-2 rounded bg-sidebar border border-theme active:scale-90 transition-transform duration-200" title="Toggle Menu" aria-label="Toggle Menu" aria-expanded="false" aria-controls="cafe-menu-sidebar">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -168,10 +166,10 @@
         </div>
     </header>
 
-    <div class="flex-1 flex relative overflow-hidden">
+    <div class="flex-1 flex relative overflow-hidden w-full">
 
-        <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 will-change-transform flex flex-col md:relative">
-            <div class="p-3 border-b border-theme space-y-2">
+        <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 will-change-transform flex flex-col md:relative h-full">
+            <div class="p-3 border-b border-theme space-y-2 shrink-0">
                 <input type="text" id="bean-search-input" placeholder="Search menu items..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all">
                 <div class="flex justify-between items-center text-xs">
                     <span class="text-muted">Roast Order:</span>
@@ -186,7 +184,7 @@
                 <div class="text-center py-8 text-sm text-muted">No beans ground yet. Pour a zip to begin brewing.</div>
             </div>
 
-            <div class="border-t border-theme p-3 bg-surface/40 flex flex-col max-h-[220px]">
+            <div class="border-t border-theme p-3 bg-surface/40 flex flex-col max-h-[220px] shrink-0">
                 <div class="flex justify-between items-center mb-1.5 px-1">
                     <span class="text-xs font-bold tracking-wide uppercase opacity-75">History</span>
                     <button id="clear-history-btn" class="text-[11px] text-muted hover:text-[var(--accent)] transition-colors">Clear</button>
@@ -199,11 +197,11 @@
 
         <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/40 z-10 opacity-0 pointer-events-none transition-opacity duration-300 cursor-pointer" aria-hidden="true"></div>
 
-        <main class="flex-1 relative bg-[var(--bg-base)] overflow-hidden">
+        <main class="flex-1 relative bg-[var(--bg-base)] overflow-hidden h-full select-text">
             
-            <iframe id="coffee-mug-frame" class="absolute inset-0 w-full h-full border-none hidden"></iframe>
+            <iframe id="coffee-mug-frame" class="absolute inset-0 w-full h-full border-none hidden z-0"></iframe>
             
-            <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300">
+            <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 z-10 select-none">
                 <div class="text-5xl mb-4 animate-bounce">☕</div>
                 <h2 class="text-xl font-semibold mb-1">Your coffee mug is empty</h2>
                 <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
@@ -251,7 +249,7 @@
 
         let groundBeansMap = {};
         let sortedBeanPaths = [];
-        let currentlyRenderedList = []; // Holds the matching runtime visible sort configuration list
+        let currentlyRenderedList = []; 
         let activeBeanPath = null;
         let isSidebarOpen = false;
         let readingHistoryArray = [];
@@ -274,7 +272,6 @@
                 document.documentElement.className = `theme-${savedStyle}`;
             }
 
-            // Load History tracking
             try {
                 const preservedHistory = localStorage.getItem('cozy_reading_history');
                 if(preservedHistory) {
@@ -286,4 +283,343 @@
             try {
                 const cachedBeans = await localforage.getItem('cached_zip');
                 if (cachedBeans) {
-                    await
+                    await processCoffeeZip(cachedBeans);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function splashMugColor() {
+            try {
+                const frameDoc = coffeeMugFrame.contentDocument || coffeeMugFrame.contentWindow.document;
+                if (!frameDoc || !frameDoc.body) return;
+
+                const targetBg = getComputedStyle(document.body).getPropertyValue('--bg-base').trim();
+                const targetText = getComputedStyle(document.body).getPropertyValue('--text-main').trim();
+
+                let styleTag = frameDoc.getElementById('mug-theme-override');
+                if (!styleTag) {
+                    styleTag = frameDoc.createElement('style');
+                    styleTag.id = 'mug-theme-override';
+                    frameDoc.head.appendChild(styleTag);
+                }
+
+                styleTag.textContent = `
+                    body, html, #page, .wrapper, main, div, p, span, section, article { 
+                        background-color: ${targetBg} !important; 
+                        color: ${targetText} !important; 
+                    }
+                `;
+            } catch (e) {}
+        }
+
+        mugStyleToggle.addEventListener('click', () => {
+            const isDark = document.documentElement.classList.contains('theme-dark') ||
+                           (!document.documentElement.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+            const nextTheme = isDark ? 'light' : 'dark';
+            document.documentElement.className = `theme-${nextTheme}`;
+            localStorage.setItem('theme', nextTheme);
+            splashMugColor();
+        });
+
+        function toggleSidebarState() {
+            isSidebarOpen = !isSidebarOpen;
+            baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
+
+            if (isSidebarOpen) {
+                cafeMenuSidebar.classList.add('sidebar-open');
+                if (window.innerWidth < 768) {
+                    cafeApronOverlay.classList.remove('opacity-0', 'pointer-events-none');
+                    cafeApronOverlay.classList.add('opacity-100', 'pointer-events-auto');
+                }
+            } else {
+                cafeMenuSidebar.classList.remove('sidebar-open');
+                cafeApronOverlay.classList.remove('opacity-100', 'pointer-events-auto');
+                cafeApronOverlay.classList.add('opacity-0', 'pointer-events-none');
+            }
+
+            if (window.innerWidth >= 768) {
+                window.dispatchEvent(new Event('resize'));
+            }
+        }
+
+        baristaMenuToggle.addEventListener('click', () => toggleSidebarState());
+        cafeApronOverlay.addEventListener('click', () => toggleSidebarState());
+
+        coffeeZipInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            try {
+                await localforage.setItem('cached_zip', file);
+            } catch (err) {}
+            await processCoffeeZip(file);
+        });
+
+        async function processCoffeeZip(file) {
+            try {
+                const zip = await JSZip.loadAsync(file);
+                groundBeansMap = {};
+                sortedBeanPaths = [];
+
+                zip.forEach((relativePath, zipEntry) => {
+                    if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.html')) {
+                        groundBeansMap[relativePath] = zipEntry;
+                        sortedBeanPaths.push(relativePath);
+                    }
+                });
+
+                renderCafeMenu();
+
+                const lastBrew = localStorage.getItem('last_active_path');
+                if (lastBrew && groundBeansMap[lastBrew]) {
+                    await pourMugSelection(lastBrew, true);
+                } else if (currentlyRenderedList.length > 0) {
+                    await pourMugSelection(currentlyRenderedList[0]);
+                }
+
+            } catch (err) {
+                alert("Coffee package failed to pour: " + err.message);
+            }
+        }
+
+        function renderCafeMenu() {
+            const query = beanSearchInput.value.toLowerCase();
+            const sortOrder = roastSortSelect.value;
+
+            currentlyRenderedList = sortedBeanPaths.filter(path => {
+                const filename = path.split('/').pop();
+                return filename.toLowerCase().includes(query);
+            });
+
+            currentlyRenderedList.sort((a, b) => {
+                const nameA = a.split('/').pop();
+                const nameB = b.split('/').pop();
+                return sortOrder === 'asc'
+                    ? nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
+                    : nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
+            });
+
+            cozyDockDropdown.innerHTML = '';
+            currentlyRenderedList.forEach((path, index) => {
+                const option = document.createElement('option');
+                option.value = path;
+                option.textContent = `Blend ${index + 1} of ${currentlyRenderedList.length}`;
+                cozyDockDropdown.appendChild(option);
+            });
+
+            if (currentlyRenderedList.length === 0) {
+                brewedItemsList.innerHTML = `<div class="text-center py-8 text-sm text-muted">No café items match your blend search.</div>`;
+                return;
+            }
+
+            brewedItemsList.innerHTML = '';
+            currentlyRenderedList.forEach(path => {
+                const filename = path.split('/').pop();
+                const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
+
+                const button = document.createElement('button');
+                button.className = `w-full text-left p-3 rounded-lg border transition-all duration-200 text-sm flex flex-col gap-1 ${
+                    activeBeanPath === path
+                        ? 'bg-accent text-stone-900 font-semibold border-transparent shadow-sm scale-[0.99]'
+                        : 'bg-surface border-theme hover:opacity-90 active:scale-[0.98]'
+                }`;
+
+                button.innerHTML = `
+                    <span class="truncate w-full">${filename}</span>
+                    ${folderPath ? `<span class="text-[10px] opacity-70 truncate w-full">${folderPath}</span>` : ''}
+                `;
+
+                button.addEventListener('click', () => {
+                    pourMugSelection(path);
+                    if (window.innerWidth < 768) {
+                        toggleSidebarState();
+                    }
+                });
+
+                brewedItemsList.appendChild(button);
+            });
+
+            updatePaginationControls();
+        }
+
+        function appendHistoryTrack(path) {
+            if(!path) return;
+            readingHistoryArray = readingHistoryArray.filter(item => item !== path);
+            readingHistoryArray.unshift(path);
+
+            if(readingHistoryArray.length > 35) {
+                readingHistoryArray.pop();
+            }
+
+            localStorage.setItem('cozy_reading_history', JSON.stringify(readingHistoryArray));
+            renderHistoryView();
+        }
+
+        function renderHistoryView() {
+            if(readingHistoryArray.length === 0) {
+                readingHistoryList.innerHTML = `<div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>`;
+                return;
+            }
+
+            readingHistoryList.innerHTML = '';
+            readingHistoryArray.forEach(path => {
+                const filename = path.split('/').pop();
+                const itemBtn = document.createElement('button');
+                itemBtn.className = "w-full text-left px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/5 truncate block text-muted hover:text-[var(--text-main)] transition-colors";
+                itemBtn.textContent = filename;
+                itemBtn.title = path;
+                itemBtn.addEventListener('click', () => {
+                    if(groundBeansMap[path]) {
+                        pourMugSelection(path);
+                    } else {
+                        alert("This blend link is no longer available in the currently parsed package.");
+                    }
+                });
+                readingHistoryList.appendChild(itemBtn);
+            });
+        }
+
+        clearHistoryBtn.addEventListener('click', () => {
+            readingHistoryArray = [];
+            localStorage.removeItem('cozy_reading_history');
+            renderHistoryView();
+        });
+
+        async function pourMugSelection(path, restoreScrollPosition = false) {
+            activeBeanPath = path;
+            localStorage.setItem('last_active_path', path);
+
+            appendHistoryTrack(path);
+            renderCafeMenu();
+
+            const entry = groundBeansMap[path];
+            if (!entry) return;
+
+            let htmlContent = await entry.async('string');
+
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+                const images = doc.querySelectorAll('img');
+
+                images.forEach(img => {
+                    let embeddedBase64 = null;
+                    for (const attr of img.attributes) {
+                        if (attr.value.startsWith('data:image/')) {
+                            if (attr.name !== 'src' || !embeddedBase64) {
+                                embeddedBase64 = attr.value;
+                            }
+                        }
+                    }
+                    if (embeddedBase64) {
+                        img.setAttribute('src', embeddedBase64);
+                        img.removeAttribute('loading');
+                        img.classList.remove('lazyload', 'lazy');
+                    }
+                });
+
+                htmlContent = doc.documentElement.outerHTML;
+            } catch (e) {}
+
+            emptyMugState.classList.add('hidden');
+            coffeeMugFrame.classList.remove('hidden');
+            coffeeMugFrame.srcdoc = htmlContent;
+
+            coffeeMugFrame.onload = () => {
+                const frameWindow = coffeeMugFrame.contentWindow;
+                splashMugColor();
+                cozyPaginationDock.classList.remove('dock-visible');
+
+                if (restoreScrollPosition) {
+                    const savedScroll = localStorage.getItem(`scroll_${path}`);
+                    if (savedScroll) {
+                        const targetScroll = parseFloat(savedScroll);
+                        let attempts = 0;
+                        const scrollInterval = setInterval(() => {
+                            frameWindow.scrollTo(0, targetScroll);
+                            attempts++;
+                            if (attempts > 10 || frameWindow.scrollY === targetScroll) {
+                                clearInterval(scrollInterval);
+                            }
+                        }, 50);
+                    }
+                }
+
+                frameWindow.removeEventListener('scroll', handleFrameScroll);
+                frameWindow.addEventListener('scroll', handleFrameScroll);
+            };
+        }
+
+        function handleFrameScroll() {
+            cacheScrollPosition();
+
+            const win = coffeeMugFrame.contentWindow;
+            if (!win) return;
+
+            const docElem = win.document.documentElement;
+            const totalHeight = docElem.scrollHeight;
+            const scrollPos = win.scrollY + win.innerHeight;
+
+            if (totalHeight - scrollPos <= 45) {
+                cozyPaginationDock.classList.add('dock-visible');
+            } else {
+                cozyPaginationDock.classList.remove('dock-visible');
+            }
+        }
+
+        const cacheScrollPosition = debounce(() => {
+            if (activeBeanPath) {
+                const frameWindow = coffeeMugFrame.contentWindow;
+                if (frameWindow) {
+                    localStorage.setItem(`scroll_${activeBeanPath}`, frameWindow.scrollY);
+                }
+            }
+        }, 200);
+
+        function updatePaginationControls() {
+            if (currentlyRenderedList.length === 0 || !activeBeanPath) {
+                cozyPaginationDock.style.display = 'none';
+                return;
+            }
+            cozyPaginationDock.style.display = 'flex';
+
+            const currentIndex = currentlyRenderedList.indexOf(activeBeanPath);
+            
+            if(currentIndex !== -1) {
+                cozyDockDropdown.value = activeBeanPath;
+            }
+
+            brewPrevBtn.disabled = currentIndex <= 0;
+            brewNextBtn.disabled = currentIndex === -1 || currentIndex === currentlyRenderedList.length - 1;
+        }
+
+        cozyDockDropdown.addEventListener('change', (e) => {
+            if (e.target.value) {
+                pourMugSelection(e.target.value);
+            }
+        });
+
+        brewPrevBtn.addEventListener('click', () => {
+            const currentIndex = currentlyRenderedList.indexOf(activeBeanPath);
+            if (currentIndex > 0) {
+                pourMugSelection(currentlyRenderedList[currentIndex - 1]);
+            }
+        });
+
+        brewNextBtn.addEventListener('click', () => {
+            const currentIndex = currentlyRenderedList.indexOf(activeBeanPath);
+            if (currentIndex !== -1 && currentIndex < currentlyRenderedList.length - 1) {
+                pourMugSelection(currentlyRenderedList[currentIndex + 1]);
+            }
+        });
+
+        beanSearchInput.addEventListener('input', renderCafeMenu);
+        roastSortSelect.addEventListener('change', renderCafeMenu);
+
+        init();
+    </script>
+</body>
+</html>
