@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
-    
+
     <style>
         /* Lofi Coffee Theme Definitions */
         :root {
@@ -88,13 +88,36 @@
             background: var(--border-color);
             border-radius: 4px;
         }
+
+        /*
+         * Sidebar slide state, defined as real CSS rather than toggled Tailwind
+         * utility classes (previously -translate-x-full / translate-x-0).
+         * The Tailwind CDN build generates styles by watching the DOM and adding
+         * rules for class names as it sees them. Utility classes already present
+         * in the markup at load time are fine, but a class added for the first
+         * time purely at runtime (which is what a JS-driven toggle does) can
+         * race that generation step - most visible on iOS Safari, where the
+         * first tap can appear to do nothing. Defining the two states directly
+         * here means the rule exists from first paint, no race possible.
+         */
+        #cafe-menu-sidebar {
+            transform: translateX(-100%);
+        }
+        #cafe-menu-sidebar.sidebar-open {
+            transform: translateX(0);
+        }
+        @media (min-width: 768px) {
+            #cafe-menu-sidebar {
+                transform: translateX(0);
+            }
+        }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col overflow-hidden select-none">
 
     <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30">
         <div class="flex items-center space-x-3">
-            <button id="barista-menu-toggle" class="p-2 rounded bg-sidebar border border-theme active:scale-95 transition-transform" title="Toggle Menu">
+            <button id="barista-menu-toggle" class="p-2 rounded bg-sidebar border border-theme active:scale-95 transition-transform" title="Toggle Menu" aria-label="Toggle Menu" aria-expanded="false" aria-controls="cafe-menu-sidebar">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
             </button>
             <h1 class="text-md md:text-lg font-bold tracking-tight">Cozy Coffee House</h1>
@@ -112,8 +135,8 @@
     </header>
 
     <div class="flex-1 flex relative overflow-hidden">
-        
-        <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transform -translate-x-full transition-transform duration-300 will-change-transform flex flex-col md:relative md:translate-x-0">
+
+        <aside id="cafe-menu-sidebar" class="absolute inset-y-0 left-0 w-80 bg-sidebar border-r border-theme z-20 transition-transform duration-300 will-change-transform flex flex-col md:relative">
             <div class="p-3 border-b border-theme space-y-2">
                 <input type="text" id="bean-search-input" placeholder="Search menu items..." class="w-full px-3 py-1.5 text-sm rounded bg-surface border border-theme focus:outline-none focus:ring-1 focus:ring-[var(--accent)]">
                 <div class="flex justify-between items-center text-xs">
@@ -130,7 +153,7 @@
             </div>
         </aside>
 
-        <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/50 z-10 hidden transition-opacity duration-300 cursor-pointer"></div>
+        <div id="cafe-apron-overlay" class="absolute inset-0 bg-black/50 z-10 hidden transition-opacity duration-300 cursor-pointer" aria-hidden="true"></div>
 
         <main class="flex-1 relative bg-[var(--bg-base)] transition-colors duration-300">
             <iframe id="coffee-mug-frame" class="absolute inset-0 w-full h-full border-none hidden"></iframe>
@@ -156,23 +179,28 @@
         const mugStyleToggle = document.getElementById('mug-style-toggle');
 
         // State Tracking Engine
-        let groundBeansMap = {}; 
+        let groundBeansMap = {};
         let sortedBeanPaths = [];
         let activeBeanPath = null;
-        let isSidebarOpen = false; 
+        let isSidebarOpen = false;
+
+        // Small helper: delays invoking fn until `delay` ms have passed since the
+        // last call. Used to keep scroll-position caching off the main thread's
+        // critical path during an active scroll gesture.
+        function debounce(fn, delay) {
+            let timeoutId;
+            return (...args) => {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => fn(...args), delay);
+            };
+        }
 
         // Initialize Cafe Viewport Layout
         async function init() {
             // Screen Breakpoint Check for initial setup
-            if (window.innerWidth >= 768) {
-                isSidebarOpen = true;
-                cafeMenuSidebar.classList.remove('-translate-x-full');
-                cafeMenuSidebar.classList.add('translate-x-0');
-            } else {
-                isSidebarOpen = false;
-                cafeMenuSidebar.classList.remove('translate-x-0');
-                cafeMenuSidebar.classList.add('-translate-x-full');
-            }
+            isSidebarOpen = window.innerWidth >= 768;
+            cafeMenuSidebar.classList.toggle('sidebar-open', isSidebarOpen);
+            baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
 
             // Restore Custom Lofi Mug Theme
             const savedStyle = localStorage.getItem('theme');
@@ -199,14 +227,14 @@
 
                 const targetBg = getComputedStyle(document.body).getPropertyValue('--bg-base').trim();
                 const targetText = getComputedStyle(document.body).getPropertyValue('--text-main').trim();
-                
+
                 let styleTag = frameDoc.getElementById('mug-theme-override');
                 if (!styleTag) {
                     styleTag = frameDoc.createElement('style');
                     styleTag.id = 'mug-theme-override';
                     frameDoc.head.appendChild(styleTag);
                 }
-                
+
                 styleTag.textContent = `
                     body, html, #page, .wrapper, main, div, p, span, section, article { 
                         background-color: ${targetBg} !important; 
@@ -220,43 +248,43 @@
 
         // Toggle Mug Visual Styles
         mugStyleToggle.addEventListener('click', () => {
-            const isDark = document.documentElement.classList.contains('theme-dark') || 
+            const isDark = document.documentElement.classList.contains('theme-dark') ||
                            (!document.documentElement.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            
+
             const nextTheme = isDark ? 'light' : 'dark';
             document.documentElement.className = `theme-${nextTheme}`;
             localStorage.setItem('theme', nextTheme);
-            
+
             splashMugColor();
         });
 
-        // Fixed Sidebar Visibility Mechanics (Forcing DOM frame updates for Safari animation pipelines)
+        // Sidebar Visibility Mechanics
         function toggleSidebarState() {
+            isSidebarOpen = !isSidebarOpen;
+            baristaMenuToggle.setAttribute('aria-expanded', String(isSidebarOpen));
+
             if (isSidebarOpen) {
-                cafeMenuSidebar.classList.remove('translate-x-0');
-                cafeMenuSidebar.classList.add('-translate-x-full');
-                cafeApronOverlay.classList.add('hidden');
-                isSidebarOpen = false;
-            } else {
-                // Read geometry to force Safari to calculate a distinct style recalculation pass before modification
+                // Force a style recalculation before starting the transition -
+                // helps Safari reliably animate the very first time this runs.
                 void cafeMenuSidebar.offsetHeight;
 
-                cafeMenuSidebar.classList.remove('-translate-x-full');
-                cafeMenuSidebar.classList.add('translate-x-0');
+                cafeMenuSidebar.classList.add('sidebar-open');
                 if (window.innerWidth < 768) {
                     cafeApronOverlay.classList.remove('hidden');
                 }
-                isSidebarOpen = true;
+            } else {
+                cafeMenuSidebar.classList.remove('sidebar-open');
+                cafeApronOverlay.classList.add('hidden');
             }
         }
-        
+
         // Explicit Click bindings
         baristaMenuToggle.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             toggleSidebarState();
         });
-        
+
         cafeApronOverlay.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -320,8 +348,8 @@
             filtered.sort((a, b) => {
                 const nameA = a.split('/').pop();
                 const nameB = b.split('/').pop();
-                
-                return sortOrder === 'asc' 
+
+                return sortOrder === 'asc'
                     ? nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
                     : nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
             });
@@ -338,8 +366,8 @@
 
                 const button = document.createElement('button');
                 button.className = `w-full text-left p-3 rounded-lg border transition-all text-sm flex flex-col gap-1 ${
-                    activeBeanPath === path 
-                        ? 'bg-accent text-stone-900 font-semibold border-transparent shadow-sm' 
+                    activeBeanPath === path
+                        ? 'bg-accent text-stone-900 font-semibold border-transparent shadow-sm'
                         : 'bg-surface border-theme hover:opacity-90'
                 }`;
 
@@ -371,15 +399,15 @@
 
             let htmlContent = await entry.async('string');
 
-            // PRE-PASS FIX FOR LAZY-LOADED EMBEDDED GRAPHICS 
+            // PRE-PASS FIX FOR LAZY-LOADED EMBEDDED GRAPHICS
             try {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(htmlContent, 'text/html');
                 const images = doc.querySelectorAll('img');
-                
+
                 images.forEach(img => {
                     let embeddedBase64 = null;
-                    
+
                     for (const attr of img.attributes) {
                         if (attr.value.startsWith('data:image/')) {
                             if (attr.name !== 'src' || !embeddedBase64) {
@@ -387,14 +415,14 @@
                             }
                         }
                     }
-                    
+
                     if (embeddedBase64) {
                         img.setAttribute('src', embeddedBase64);
-                        img.removeAttribute('loading'); 
+                        img.removeAttribute('loading');
                         img.classList.remove('lazyload', 'lazy');
                     }
                 });
-                
+
                 htmlContent = doc.documentElement.outerHTML;
             } catch (e) {
                 console.error("Graphics conversion cycle fault: ", e);
@@ -407,7 +435,7 @@
 
             coffeeMugFrame.onload = () => {
                 const frameWindow = coffeeMugFrame.contentWindow;
-                
+
                 // Align internal color theme values immediately
                 splashMugColor();
 
@@ -431,14 +459,17 @@
             };
         }
 
-        function cacheScrollPosition(e) {
+        // Debounced so a scroll gesture doesn't fire a synchronous localStorage
+        // write on every single scroll event (localStorage.setItem is blocking,
+        // and that adds up fast during a fast flick, especially on iOS).
+        const cacheScrollPosition = debounce(() => {
             if (activeBeanPath) {
                 const frameWindow = coffeeMugFrame.contentWindow;
                 if (frameWindow) {
                     localStorage.setItem(`scroll_${activeBeanPath}`, frameWindow.scrollY);
                 }
             }
-        }
+        }, 200);
 
         beanSearchInput.addEventListener('input', renderCafeMenu);
         roastSortSelect.addEventListener('change', renderCafeMenu);
