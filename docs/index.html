@@ -119,15 +119,31 @@
             }
         }
 
-        /* Bottom Pagination Bar Styles */
+        /* Expanded Bottom Pagination Bar Styles */
         #cozy-pagination-dock {
             background-color: var(--bg-surface);
             border-color: var(--border-color);
-            transform: translateY(120%);
+            transform: translateY(140%);
             transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
         }
         #cozy-pagination-dock.dock-visible {
             transform: translateY(0);
+        }
+
+        #cozy-dock-dropdown {
+            background-color: transparent;
+            color: var(--text-main);
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            padding-right: 1.5rem;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%234a3e3d' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right center;
+        }
+        
+        html.theme-dark #cozy-dock-dropdown {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23e0def4' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/></svg>");
         }
     </style>
 </head>
@@ -182,15 +198,19 @@
                 <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
             </div>
 
-            <div id="cozy-pagination-dock" class="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-full border shadow-lg flex items-center space-x-6 z-20 opacity-95 backdrop-blur-md">
-                <button id="brew-prev-btn" class="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 active:scale-75 transition-transform disabled:opacity-30 disabled:pointer-events-none" title="Previous Page">
+            <div id="cozy-pagination-dock" class="absolute bottom-6 left-1/2 -translate-x-1/2 px-6 py-3.5 rounded-2xl border shadow-2xl flex items-center space-x-8 z-20 opacity-95 backdrop-blur-md min-w-[280px] md:min-w-[340px]">
+                <button id="brew-prev-btn" class="p-2.5 rounded-xl border border-theme bg-sidebar/50 hover:bg-black/5 dark:hover:bg-white/10 active:scale-75 transition-transform disabled:opacity-20 disabled:pointer-events-none" title="Previous Page">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
                 </button>
-                <div class="flex flex-col items-center text-center select-none min-w-[100px]">
-                    <span class="text-[10px] tracking-wider uppercase opacity-60 font-semibold">Current Blend</span>
-                    <span id="cozy-dock-title" class="text-xs font-bold truncate max-w-[140px]">0 / 0</span>
+                
+                <div class="flex-1 flex flex-col items-center text-center select-none min-w-[140px]">
+                    <span class="text-[10px] tracking-wider uppercase opacity-60 font-bold mb-0.5">Current Blend</span>
+                    <div class="relative inline-block max-w-[180px] w-full text-center">
+                        <select id="cozy-dock-dropdown" class="text-sm font-bold text-center w-full focus:outline-none bg-transparent max-w-full truncate py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5"></select>
+                    </div>
                 </div>
-                <button id="brew-next-btn" class="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 active:scale-75 transition-transform disabled:opacity-30 disabled:pointer-events-none" title="Next Page">
+
+                <button id="brew-next-btn" class="p-2.5 rounded-xl border border-theme bg-sidebar/50 hover:bg-black/5 dark:hover:bg-white/10 active:scale-75 transition-transform disabled:opacity-20 disabled:pointer-events-none" title="Next Page">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                 </button>
             </div>
@@ -209,11 +229,10 @@
         const roastSortSelect = document.getElementById('roast-sort-select');
         const mugStyleToggle = document.getElementById('mug-style-toggle');
         
-        // Pagination Dock Elements
         const cozyPaginationDock = document.getElementById('cozy-pagination-dock');
         const brewPrevBtn = document.getElementById('brew-prev-btn');
         const brewNextBtn = document.getElementById('brew-next-btn');
-        const cozyDockTitle = document.getElementById('cozy-dock-title');
+        const cozyDockDropdown = document.getElementById('cozy-dock-dropdown');
 
         let groundBeansMap = {};
         let sortedBeanPaths = [];
@@ -358,6 +377,15 @@
                     : nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
             });
 
+            // Populates drop-down using pure sequence numbers
+            cozyDockDropdown.innerHTML = '';
+            filtered.forEach((path, index) => {
+                const option = document.createElement('option');
+                option.value = path;
+                option.textContent = `Blend ${index + 1} of ${filtered.length}`;
+                cozyDockDropdown.appendChild(option);
+            });
+
             if (filtered.length === 0) {
                 brewedItemsList.innerHTML = `<div class="text-center py-8 text-sm text-muted">No café items match your blend search.</div>`;
                 return;
@@ -390,7 +418,7 @@
                 brewedItemsList.appendChild(button);
             });
 
-            updatePaginationControls();
+            updatePaginationControls(filtered);
         }
 
         async function pourMugSelection(path, restoreScrollPosition = false) {
@@ -435,7 +463,7 @@
             coffeeMugFrame.onload = () => {
                 const frameWindow = coffeeMugFrame.contentWindow;
                 splashMugColor();
-                cozyPaginationDock.classList.remove('dock-visible'); // Reset view scroll state position
+                cozyPaginationDock.classList.remove('dock-visible');
 
                 if (restoreScrollPosition) {
                     const savedScroll = localStorage.getItem(`scroll_${path}`);
@@ -457,7 +485,6 @@
             };
         }
 
-        // Monitors inside the loaded iframe to trigger pagination overlay smoothly at the end
         function handleFrameScroll() {
             cacheScrollPosition();
 
@@ -468,7 +495,6 @@
             const totalHeight = docElem.scrollHeight;
             const scrollPos = win.scrollY + win.innerHeight;
 
-            // Pops up when user hits within 45px of the view's absolute base
             if (totalHeight - scrollPos <= 45) {
                 cozyPaginationDock.classList.add('dock-visible');
             } else {
@@ -485,22 +511,31 @@
             }
         }, 200);
 
-        // Handles Bottom Dock Text Counters and Arrow States
-        function updatePaginationControls() {
-            if (sortedBeanPaths.length === 0 || !activeBeanPath) {
+        function updatePaginationControls(currentFilteredList) {
+            const listToUse = currentFilteredList || sortedBeanPaths;
+            
+            if (listToUse.length === 0 || !activeBeanPath) {
                 cozyPaginationDock.style.display = 'none';
                 return;
             }
             cozyPaginationDock.style.display = 'flex';
 
-            const currentIndex = sortedBeanPaths.indexOf(activeBeanPath);
-            cozyDockTitle.textContent = `${currentIndex + 1} of ${sortedBeanPaths.length}`;
+            const currentIndex = listToUse.indexOf(activeBeanPath);
+            
+            if(currentIndex !== -1) {
+                cozyDockDropdown.value = activeBeanPath;
+            }
 
-            brewPrevBtn.disabled = currentIndex === 0;
-            brewNextBtn.disabled = currentIndex === sortedBeanPaths.length - 1;
+            brewPrevBtn.disabled = currentIndex <= 0;
+            brewNextBtn.disabled = currentIndex === -1 || currentIndex === listToUse.length - 1;
         }
 
-        // Action routes for dock arrows
+        cozyDockDropdown.addEventListener('change', (e) => {
+            if (e.target.value) {
+                pourMugSelection(e.target.value);
+            }
+        });
+
         brewPrevBtn.addEventListener('click', () => {
             const currentIndex = sortedBeanPaths.indexOf(activeBeanPath);
             if (currentIndex > 0) {
