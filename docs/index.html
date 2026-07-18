@@ -20,6 +20,7 @@
             --accent-hover: #b95d59;
             --border-color: #d3c7a8;
             --empty-mug-text: #c15c56;
+            --machine-metal: #a19487;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -33,6 +34,7 @@
                 --accent-hover: #e0afad;
                 --border-color: #312f44;
                 --empty-mug-text: #ebbcba;
+                --machine-metal: #403e5c;
             }
         }
 
@@ -46,18 +48,20 @@
             --accent-hover: #b95d59;
             --border-color: #d3c7a8;
             --empty-mug-text: #c15c56;
+            --machine-metal: #a19487;
         }
 
         html.theme-dark {
             --bg-base: #1e1d2f;
             --bg-surface: #252438;
             --bg-sidebar: #191826;
-            --text-main: #e0def4;
-            --text-muted: #908caa;
-            --accent: #ebbcba;
-            --accent-hover: #e0afad;
-            --border-color: #312f44;
-            --empty-mug-text: #ebbcba;
+                --text-main: #e0def4;
+                --text-muted: #908caa;
+                --accent: #ebbcba;
+                --accent-hover: #e0afad;
+                --border-color: #312f44;
+                --empty-mug-text: #ebbcba;
+            --machine-metal: #403e5c;
         }
 
         body {
@@ -164,44 +168,99 @@
             transform: rotate(-90deg);
         }
 
-        /* Loading Animation Effects */
-        @keyframes coffee-shake {
-            0%, 100% { transform: rotate(0deg); }
-            25% { transform: rotate(2deg); }
-            75% { transform: rotate(-2deg); }
+        /* Custom Brewing Machine Styling & Effects */
+        .brew-machine-body {
+            width: 70px;
+            height: 90px;
+            border: 4px solid var(--machine-metal);
+            border-radius: 8px 8px 4px 4px;
+            position: relative;
+            background: transparent;
         }
-        @keyframes steam-rise {
-            0% { transform: translateY(0px) scale(0.9); opacity: 0.4; }
-            50% { opacity: 0.8; }
-            100% { transform: translateY(-10px) scale(1.2); opacity: 0; }
+        .brew-machine-top {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 16px;
+            background-color: var(--machine-metal);
+            border-bottom: 2px solid var(--border-color);
         }
-        .animate-shake {
-            animation: coffee-shake 0.4s ease infinite;
+        .brew-machine-base {
+            position: absolute;
+            bottom: 0; left: -6px; right: -6px;
+            height: 12px;
+            background-color: var(--machine-metal);
+            border-radius: 4px;
         }
-        .steam-bubble {
-            animation: steam-rise 0.8s ease-in-out infinite;
+        .brew-carafe {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 42px;
+            height: 44px;
+            border: 3px solid var(--text-muted);
+            border-top-width: 2px;
+            border-radius: 4px 4px 12px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+        }
+        .carafe-handle {
+            position: absolute;
+            right: -10px;
+            top: 8px;
+            width: 10px;
+            height: 22px;
+            border: 3px solid var(--text-muted);
+            border-left: none;
+            border-radius: 0 6px 6px 0;
+        }
+        .coffee-liquid {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background-color: #654321;
+            height: 0%;
+            transition: height 0.1s linear;
+        }
+        @keyframes custom-steam {
+            0% { transform: translateY(0) scaleX(1); opacity: 0; }
+            30% { opacity: 0.6; }
+            80% { transform: translateY(-16px) scaleX(1.3); opacity: 0; }
+            100% { transform: translateY(-16px) scaleX(1.3); opacity: 0; }
+        }
+        .steam-line {
+            width: 3px;
+            height: 10px;
+            background: var(--text-muted);
+            border-radius: 2px;
+            opacity: 0;
+            position: absolute;
+            top: 18px;
+        }
+        .brewing .steam-line-1 { left: 26px; animation: custom-steam 1s infinite ease-in-out; }
+        .brewing .steam-line-2 { left: 34px; animation: custom-steam 1s infinite ease-in-out 0.3s; }
+        .brewing .steam-line-3 { left: 42px; animation: custom-steam 1s infinite ease-in-out 0.6s; }
+
+        @keyframes drip-drop {
+            0% { transform: translateY(0); opacity: 1; }
+            80% { transform: translateY(22px); opacity: 1; }
+            100% { transform: translateY(22px); opacity: 0; }
+        }
+        .coffee-drip {
+            width: 4px;
+            height: 6px;
+            background: #654321;
+            border-radius: 50%;
+            position: absolute;
+            top: 16px;
+            left: 33px;
+            opacity: 0;
+        }
+        .brewing .coffee-drip {
+            animation: drip-drop 0.6s infinite linear;
         }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col overflow-hidden select-none">
-
-    <div id="brew-loader-overlay" class="fixed inset-0 bg-[var(--bg-base)] z-50 flex flex-col items-center justify-center p-6 text-center transition-opacity duration-300 opacity-0 pointer-events-none">
-        <div class="relative flex items-center justify-center mb-4">
-            <span id="brew-machine-steam" class="absolute -top-6 text-xl opacity-0 steam-bubble">💨</span>
-            <div id="brew-machine-icon" class="text-6xl transition-transform duration-300">☕</div>
-        </div>
-        <h2 class="text-xl font-semibold mb-1 text-empty-mug">Brewing Your Archive...</h2>
-        <p id="brew-percentage-label" class="text-sm font-bold text-muted mb-4">0% grounded</p>
-        
-        <div class="w-64 bg-black/5 dark:bg-white/5 h-2 rounded-full overflow-hidden border border-theme mb-6">
-            <div id="brew-progress-bar" class="h-full bg-accent transition-all duration-100" style="width: 0%"></div>
-        </div>
-
-        <div class="max-w-xs p-4 rounded-xl bg-surface border border-theme shadow-sm">
-            <span class="text-[10px] tracking-wider uppercase font-bold text-muted block mb-1">Cozy Trivia Minute</span>
-            <p id="brew-fun-fact" class="text-xs text-muted italic">Grinding facts...</p>
-        </div>
-    </div>
 
     <header class="h-14 px-4 flex items-center justify-between border-b border-theme bg-surface z-30 shrink-0">
         <div class="flex items-center space-x-3">
@@ -263,7 +322,35 @@
             
             <iframe id="coffee-mug-frame" class="absolute inset-0 w-full h-full border-none hidden z-0"></iframe>
             
-            <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 z-10 select-none">
+            <div id="brew-loader-overlay" class="absolute inset-0 bg-[var(--bg-base)] z-10 flex flex-col items-center justify-center p-6 text-center transition-opacity duration-300 opacity-0 pointer-events-none">
+                <div id="machine-wrapper" class="relative flex items-center justify-center mb-6 h-28">
+                    <div class="steam-line steam-line-1"></div>
+                    <div class="steam-line steam-line-2"></div>
+                    <div class="steam-line steam-line-3"></div>
+                    <div class="coffee-drip"></div>
+                    <div class="brew-machine-body">
+                        <div class="brew-machine-top"></div>
+                        <div class="brew-carafe">
+                            <div id="carafe-fluid" class="coffee-liquid"></div>
+                        </div>
+                        <div class="carafe-handle"></div>
+                        <div class="brew-machine-base"></div>
+                    </div>
+                </div>
+                <h2 class="text-xl font-semibold mb-1 text-empty-mug">Brewing Your Archive...</h2>
+                <p id="brew-percentage-label" class="text-sm font-bold text-muted mb-4">0% grounded</p>
+                
+                <div class="w-64 bg-black/5 dark:bg-white/5 h-2 rounded-full overflow-hidden border border-theme mb-6">
+                    <div id="brew-progress-bar" class="h-full bg-accent transition-all duration-100" style="width: 0%"></div>
+                </div>
+
+                <div class="max-w-xs p-4 rounded-xl bg-surface border border-theme shadow-sm">
+                    <span class="text-[10px] tracking-wider uppercase font-bold text-muted block mb-1">Cozy Trivia Minute</span>
+                    <p id="brew-fun-fact" class="text-xs text-muted italic">Grinding facts...</p>
+                </div>
+            </div>
+
+            <div id="empty-mug-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center transition-all duration-300 z-0 select-none">
                 <div class="text-5xl mb-4 animate-bounce">☕</div>
                 <h2 class="text-xl font-semibold mb-1 text-empty-mug">Your coffee mug is empty</h2>
                 <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
@@ -318,10 +405,9 @@
         const brewPercentageLabel = document.getElementById('brew-percentage-label');
         const brewProgressBar = document.getElementById('brew-progress-bar');
         const brewFunFact = document.getElementById('brew-fun-fact');
-        const brewMachineIcon = document.getElementById('brew-machine-icon');
-        const brewMachineSteam = document.getElementById('brew-machine-steam');
+        const machineWrapper = document.getElementById('machine-wrapper');
+        const carafeFluid = document.getElementById('carafe-fluid');
 
-        // Cozy SFW fun facts list
         const funFacts = [
             "Strawberries aren't actual berries, but bananas, pumpkins, and watermelons technically are!",
             "Before basic alarms, there were 'knocker-ups' who went around tapping on windows with sticks to wake people up.",
@@ -475,16 +561,16 @@
         });
 
         async function processCoffeeZip(file) {
-            // Apply a fresh random fun fact
             const randomFact = funFacts[Math.floor(Math.random() * funFacts.length)];
             brewFunFact.textContent = randomFact;
 
             brewProgressBar.style.width = '0%';
+            carafeFluid.style.height = '0%';
             brewPercentageLabel.textContent = '0% grounded';
-            brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
             
-            // Start mild shaking animation effect
-            brewMachineIcon.classList.add('animate-shake');
+            // Activate machine drips and steam pipelines
+            machineWrapper.classList.add('brewing');
+            brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
 
             try {
                 const zip = await JSZip.loadAsync(file);
@@ -503,12 +589,8 @@
                     
                     const progressPercent = Math.round((currentProcessed / totalEntries) * 100);
                     brewProgressBar.style.width = `${progressPercent}%`;
+                    carafeFluid.style.height = `${progressPercent}%`;
                     brewPercentageLabel.textContent = `${progressPercent}% grounded`;
-                    
-                    // Release dynamic puff visuals past half-way mark
-                    if (progressPercent > 50) {
-                        brewMachineSteam.style.opacity = '1';
-                    }
 
                     if(currentProcessed % 20 === 0) {
                         await new Promise(r => setTimeout(r, 0));
@@ -528,9 +610,7 @@
             } catch (err) {
                 alert("Coffee package failed to pour: " + err.message);
             } finally {
-                // Clear animation layers out cleanly
-                brewMachineIcon.classList.remove('animate-shake');
-                brewMachineSteam.style.opacity = '0';
+                machineWrapper.classList.remove('brewing');
                 setTimeout(() => {
                     brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
                 }, 400);
@@ -610,7 +690,6 @@
             renderHistoryView();
         }
 
-        // View rendering logic for reading logs tracker
         function renderHistoryView() {
             if(readingHistoryArray.length === 0) {
                 readingHistoryList.innerHTML = `<div class="text-muted italic px-1 py-1">No past cups tasted yet.</div>`;
