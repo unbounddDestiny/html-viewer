@@ -55,12 +55,12 @@
             --bg-base: #1e1d2f;
             --bg-surface: #252438;
             --bg-sidebar: #191826;
-                --text-main: #e0def4;
-                --text-muted: #908caa;
-                --accent: #ebbcba;
-                --accent-hover: #e0afad;
-                --border-color: #312f44;
-                --empty-mug-text: #ebbcba;
+            --text-main: #e0def4;
+            --text-muted: #908caa;
+            --accent: #ebbcba;
+            --accent-hover: #e0afad;
+            --border-color: #312f44;
+            --empty-mug-text: #ebbcba;
             --machine-metal: #403e5c;
         }
 
@@ -277,10 +277,21 @@
             <button id="unload-zip-btn" class="p-2 rounded bg-sidebar border border-theme text-sm text-empty-mug font-medium active:scale-95 transition-all hidden" title="Unload File Archive">
                 Empty Cup
             </button>
-            <label class="px-3 py-1.5 rounded bg-accent text-xs md:text-sm font-semibold text-stone-900 cursor-pointer shadow-sm hover:opacity-90 active:scale-95 transition-transform duration-200">
-                Pour New Zip
-                <input type="file" id="coffee-zip-input" accept=".zip" class="hidden">
-            </label>
+            
+            <div class="relative inline-flex items-center rounded bg-accent shadow-sm">
+                <label class="px-3 py-1.5 text-xs md:text-sm font-semibold text-stone-900 cursor-pointer hover:opacity-90 active:scale-95 transition-transform duration-200 rounded-l">
+                    Pour New Zip
+                    <input type="file" id="coffee-zip-input" accept=".zip" class="hidden">
+                </label>
+                <button id="pour-dropdown-trigger" class="px-2 py-1.5 text-xs md:text-sm font-semibold text-stone-900 border-l border-black/10 hover:opacity-90 rounded-r transition-all" title="Alternative Pour Sources">
+                    ▼
+                </button>
+                <div id="pour-dropdown-menu" class="hidden absolute right-0 top-full mt-1 w-44 rounded-md shadow-xl bg-surface border border-theme z-50 py-1 text-sm text-[var(--text-main)]">
+                    <button id="src-run-id-btn" class="w-full text-left px-4 py-2 hover:bg-black/5 dark:hover:bg-white/5 flex items-center space-x-2">
+                        <span>⚡</span> <span>Load from Run ID</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -356,6 +367,29 @@
                 <p class="text-sm text-muted max-w-xs">Load a zip archive holding self-contained HTML files to fill up your layout view.</p>
             </div>
 
+            <div id="run-id-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 select-none">
+                <div class="bg-surface border border-theme rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+                    <div>
+                        <h3 class="text-md font-bold text-empty-mug">Fetch from Github Run ID</h3>
+                        <p class="text-xs text-muted">Pull snapshot builds directly from your archive workflows.</p>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-xs font-bold uppercase tracking-wider opacity-70">Backend Endpoint URL</label>
+                        <input type="text" id="run-endpoint-input" placeholder="https://val.town proxy endpoint..." class="w-full text-sm p-2 rounded bg-[var(--bg-base)] border border-theme focus:outline-none">
+                        
+                        <label class="block text-xs font-bold uppercase tracking-wider opacity-70">Run ID</label>
+                        <input type="text" id="run-id-input" placeholder="e.g. 1234567890" class="w-full text-sm p-2 rounded bg-[var(--bg-base)] border border-theme focus:outline-none">
+                        
+                        <label class="block text-xs font-bold uppercase tracking-wider opacity-70">Custom Secret Key</label>
+                        <input type="password" id="run-secret-input" placeholder="X-Custom-Auth password" class="w-full text-sm p-2 rounded bg-[var(--bg-base)] border border-theme focus:outline-none">
+                    </div>
+                    <div class="flex space-x-2 pt-2">
+                        <button id="run-modal-cancel" class="flex-1 py-2 text-xs border border-theme rounded-xl hover:bg-black/5 text-muted transition-all">Cancel</button>
+                        <button id="run-modal-submit" class="flex-1 py-2 text-xs bg-accent font-bold text-stone-900 rounded-xl hover:opacity-90 transition-all">Fetch Blend</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none z-20">
                 <div id="cozy-pagination-dock" class="pointer-events-auto px-6 py-3.5 rounded-2xl border shadow-2xl flex items-center space-x-8 opacity-95 backdrop-blur-md min-w-[280px] md:min-w-[340px]">
                     <button id="brew-prev-btn" class="p-2.5 rounded-xl border border-theme bg-sidebar/50 hover:bg-black/5 dark:hover:bg-white/10 active:scale-75 transition-transform disabled:opacity-20 disabled:pointer-events-none" title="Previous Page">
@@ -408,6 +442,17 @@
         const machineWrapper = document.getElementById('machine-wrapper');
         const carafeFluid = document.getElementById('carafe-fluid');
 
+        // New Backend Interface Selectors
+        const pourDropdownTrigger = document.getElementById('pour-dropdown-trigger');
+        const pourDropdownMenu = document.getElementById('pour-dropdown-menu');
+        const srcRunIdBtn = document.getElementById('src-run-id-btn');
+        const runIdModal = document.getElementById('run-id-modal');
+        const runEndpointInput = document.getElementById('run-endpoint-input');
+        const runIdInput = document.getElementById('run-id-input');
+        const runSecretInput = document.getElementById('run-secret-input');
+        const runModalCancel = document.getElementById('run-modal-cancel');
+        const runModalSubmit = document.getElementById('run-modal-submit');
+
         const funFacts = [
             "Strawberries aren't actual berries, but bananas, pumpkins, and watermelons technically are!",
             "Before basic alarms, there were 'knocker-ups' who went around tapping on windows with sticks to wake people up.",
@@ -444,6 +489,10 @@
                 document.documentElement.className = `theme-${savedStyle}`;
             }
 
+            // Restore last used backend input parameters
+            runEndpointInput.value = localStorage.getItem('cozy_backend_url') || '';
+            runSecretInput.value = localStorage.getItem('cozy_backend_secret') || '';
+
             try {
                 const preservedHistory = localStorage.getItem('cozy_reading_history');
                 if(preservedHistory) {
@@ -459,6 +508,95 @@
                 }
             } catch (err) {
                 console.error(err);
+            }
+        }
+
+        // Toggle Source Dropdown UI
+        pourDropdownTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            pourDropdownMenu.classList.toggle('hidden');
+        });
+        document.addEventListener('click', () => pourDropdownMenu.classList.add('hidden'));
+
+        srcRunIdBtn.addEventListener('click', () => {
+            runIdModal.classList.remove('hidden');
+        });
+        runModalCancel.addEventListener('click', () => runIdModal.classList.add('hidden'));
+
+        runModalSubmit.addEventListener('click', async () => {
+            const endpoint = runEndpointInput.value.trim();
+            const runId = runIdInput.value.trim();
+            const secret = runSecretInput.value.trim();
+
+            if(!endpoint || !runId || !secret) {
+                alert("Please fill out all backend parameters to parse the artifact.");
+                return;
+            }
+
+            // Persist endpoint metadata configurations locally
+            localStorage.setItem('cozy_backend_url', endpoint);
+            localStorage.setItem('cozy_backend_secret', secret);
+            runIdModal.classList.add('hidden');
+
+            await fetchZipFromWorkflow(endpoint, runId, secret);
+        });
+
+        // Interface directly with your provided endpoint script architecture
+        async function fetchZipFromWorkflow(endpoint, runId, secret) {
+            const randomFact = funFacts[Math.floor(Math.random() * funFacts.length)];
+            brewFunFact.textContent = randomFact;
+            brewProgressBar.style.width = '0%';
+            carafeFluid.style.height = '0%';
+            brewPercentageLabel.textContent = 'Connecting...';
+            machineWrapper.classList.add('brewing');
+            brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
+
+            try {
+                // Step 1: Query endpoint for the matching artifact ID item
+                const targetUrl = `${endpoint.replace(/\/$/, '')}?action=getArtifact&runId=${runId}`;
+                const artRes = await fetch(targetUrl, {
+                    headers: { "X-Custom-Auth": secret }
+                });
+
+                if(!artRes.ok) throw new Error(`Backend auth error: ${artRes.status}`);
+                const artData = await artRes.json();
+                
+                if(!artData.artifactId) {
+                    throw new Error("No artifact matching name 'all-snapshots' was found inside that Run ID build pipeline.");
+                }
+
+                // Step 2: Since GH artifacts are returned as direct binary zip packages, 
+                // we download the blob by reaching through standard repository authenticated fetch pipes
+                brewPercentageLabel.textContent = 'Downloading zip...';
+                
+                // Construct standard authenticated artifact download proxy requests if supported by endpoint, 
+                // otherwise fetch from standard workflow artifact reference maps
+                const downloadUrl = `https://api.github.com/repos/unbounddDestiny/miming-html/actions/artifacts/${artData.artifactId}/zip`;
+                
+                // Realizing token handling resides securely backend side, we fetch the artifact zip source block
+                // For your specific proxy format, if the action parameter is left out or tweaked, download directly.
+                // If your token configuration blocks direct browser cross-origin requests, we fetch through the custom proxy.
+                const proxyDownloadUrl = `${endpoint.replace(/\/$/, '')}?runId=${runId}&artifactId=${artData.artifactId}`;
+                
+                const zipResponse = await fetch(proxyDownloadUrl, {
+                    headers: { "X-Custom-Auth": secret }
+                });
+
+                if(!zipResponse.ok) throw new Error("Failed fetching binary artifact payload via proxy asset route.");
+                
+                const zipBlob = await zipResponse.blob();
+                
+                // Cache into localized localForage store and spin up standard archive processor
+                try {
+                    await localforage.setItem('cached_zip', zipBlob);
+                } catch (e) {}
+
+                await processCoffeeZip(zipBlob);
+
+            } catch(err) {
+                alert(`Failed brewing from Workflow ID: ${err.message}`);
+                machineWrapper.classList.remove('brewing');
+                brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
             }
         }
 
@@ -568,7 +706,6 @@
             carafeFluid.style.height = '0%';
             brewPercentageLabel.textContent = '0% grounded';
             
-            // Activate machine drips and steam pipelines
             machineWrapper.classList.add('brewing');
             brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
 
