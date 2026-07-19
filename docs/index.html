@@ -565,7 +565,22 @@
                 const fileRes = await fetch(fileUrl);
 
                 if(!fileRes.ok) throw new Error(`File download failed: status ${fileRes.status}`);
-                const zipBlob = await fileRes.blob();
+                
+                const contentType = fileRes.headers.get("content-type") || "";
+                let zipBlob;
+
+                if (contentType.includes("application/json")) {
+                    const jsonResult = await fileRes.json();
+                    if (jsonResult.downloadUrl) {
+                        const directRes = await fetch(jsonResult.downloadUrl);
+                        if (!directRes.ok) throw new Error("Direct download from storage destination failed.");
+                        zipBlob = await directRes.blob();
+                    } else if (jsonResult.error) {
+                        throw new Error(jsonResult.error);
+                    }
+                } else {
+                    zipBlob = await fileRes.blob();
+                }
                 
                 activeZipHash = await computeBlobHash(zipBlob);
 
