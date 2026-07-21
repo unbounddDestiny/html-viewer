@@ -436,7 +436,8 @@
         const machineWrapper = document.getElementById('machine-wrapper');
         const carafeFluid = document.getElementById('carafe-fluid');
 
-        const BACKEND_ENDPOINT = "https://unboundddestiny--9f7a64b881cc11f1b3361607ee4eb77e.web.val.run";
+        // Relative URL — backend is served from the same Replit server as this page.
+        const BACKEND_ENDPOINT = "https://unboundddestiny--66a27a66827311f1a6bc1607ee4eb77e.web.val.run";
 
         const pourDropdownTrigger = document.getElementById('pour-dropdown-trigger');
         const pourDropdownMenu = document.getElementById('pour-dropdown-menu');
@@ -544,53 +545,79 @@
             brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
 
             try {
+                // ── Phase 1: Resolve artifact ID ──────────────────────────
                 const metaUrl = `${BACKEND_ENDPOINT}?action=getArtifact&runId=${runId}`;
                 const metaRes = await fetch(metaUrl);
 
-                if(!metaRes.ok) {
+                if (!metaRes.ok) {
                     const errorJson = await metaRes.json().catch(() => ({}));
                     if (metaRes.status === 401 && errorJson.debug) {
                         throw new Error(`Unauthorized (401). Browser sent referer: "${errorJson.debug.receivedReferer}"`);
                     }
-                    throw new Error(`Artifact layout metadata request failed with status: ${metaRes.status}`);
+                    throw new Error(`Artifact metadata request failed with status: ${metaRes.status}`);
                 }
-                
+
                 const metaData = await metaRes.json();
-                if(!metaData.artifactId) {
+                if (!metaData.artifactId) {
                     throw new Error("No artifact matching the name 'all-snapshots' was found inside that Run ID build pipeline.");
                 }
 
-                brewPercentageLabel.textContent = 'Brewing file stream...';
+                // ── Phase 2: Stream download with progress (0 → 50%) ─────
+                brewPercentageLabel.textContent = 'Downloading archive...';
                 const fileUrl = `${BACKEND_ENDPOINT}?action=downloadArtifact&artifactId=${metaData.artifactId}`;
                 const fileRes = await fetch(fileUrl);
+                if (!fileRes.ok) throw new Error(`Download failed: status ${fileRes.status}`);
 
-                if(!fileRes.ok) throw new Error(`File download failed: status ${fileRes.status}`);
-                
-                const contentType = fileRes.headers.get("content-type") || "";
-                let zipBlob;
+                const contentLength = fileRes.headers.get('Content-Length');
+                const totalBytes = contentLength ? parseInt(contentLength, 10) : null;
+                const reader = fileRes.body.getReader();
+                const chunks = [];
+                let received = 0;
 
-                if (contentType.includes("application/json")) {
-                    const jsonResult = await fileRes.json();
-                    if (jsonResult.downloadUrl) {
-                        const directRes = await fetch(jsonResult.downloadUrl);
-                        if (!directRes.ok) throw new Error("Direct download from storage destination failed.");
-                        zipBlob = await directRes.blob();
-                    } else if (jsonResult.error) {
-                        throw new Error(jsonResult.error);
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    received += value.length;
+
+                    // Map download bytes to 0–50% of the progress bar
+                    let dlPct;
+                    if (totalBytes) {
+                        dlPct = Math.min(50, Math.round((received / totalBytes) * 50));
+                        const pctLabel = Math.round((received / totalBytes) * 100);
+                        const rcvMB = (received / 1048576).toFixed(1);
+                        const totMB = (totalBytes / 1048576).toFixed(1);
+                        brewPercentageLabel.textContent = `Downloading ${pctLabel}% (${rcvMB} / ${totMB} MB)`;
+                    } else {
+                        // Unknown total — show MB received, hold bar at ~15%
+                        dlPct = 15;
+                        brewPercentageLabel.textContent = `Downloading... ${(received / 1048576).toFixed(1)} MB received`;
                     }
-                } else {
-                    zipBlob = await fileRes.blob();
+                    brewProgressBar.style.width = `${dlPct}%`;
+                    carafeFluid.style.height = `${dlPct}%`;
                 }
-                
+
+                // Snap to 50% once download finishes
+                brewProgressBar.style.width = '50%';
+                carafeFluid.style.height = '50%';
+                brewPercentageLabel.textContent = 'Download complete — brewing...';
+
+                const zipBlob = new Blob(chunks, { type: 'application/zip' });
+                chunks.length = 0; // release chunk refs early
+
                 activeZipHash = await computeBlobHash(zipBlob);
 
+                // Cache best-effort; large files may exceed storage quota
                 try {
                     await localforage.setItem('cached_zip', zipBlob);
-                } catch (e) {}
+                } catch (e) {
+                    console.warn('Could not cache ZIP (may exceed storage quota):', e.message);
+                }
 
-                await processCoffeeZip(zipBlob);
+                // ── Phase 3: Process / extract (50 → 100%) ───────────────
+                await processCoffeeZip(zipBlob, { progressStart: 50, alreadyLoading: true });
 
-            } catch(err) {
+            } catch (err) {
                 alert(`Brewing Error: ${err.message}`);
                 machineWrapper.classList.remove('brewing');
                 brewLoaderOverlay.classList.add('opacity-0', 'pointer-events-none');
@@ -695,16 +722,28 @@
             await processCoffeeZip(file);
         });
 
-        async function processCoffeeZip(file) {
-            const randomFact = funFacts[Math.floor(Math.random() * funFacts.length)];
-            brewFunFact.textContent = randomFact;
+        /**
+         * Process (extract) a ZIP blob and populate the viewer.
+         *
+         * @param {Blob|File} file - The ZIP to process.
+         * @param {object}   opts
+         * @param {number}   opts.progressStart   - Bar value (0-100) to start from. Default 0.
+         *                                          Use 50 when download already consumed 0-50%.
+         * @param {boolean}  opts.alreadyLoading  - When true, skip showing/resetting the loader
+         *                                          overlay (caller already set it up). Default false.
+         */
+        async function processCoffeeZip(file, { progressStart = 0, alreadyLoading = false } = {}) {
+            const progressRange = 100 - progressStart; // how much of the bar this phase owns
 
-            brewProgressBar.style.width = '0%';
-            carafeFluid.style.height = '0%';
-            brewPercentageLabel.textContent = '0% grounded';
-            
-            machineWrapper.classList.add('brewing');
-            brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
+            if (!alreadyLoading) {
+                const randomFact = funFacts[Math.floor(Math.random() * funFacts.length)];
+                brewFunFact.textContent = randomFact;
+                brewProgressBar.style.width = `${progressStart}%`;
+                carafeFluid.style.height = `${progressStart}%`;
+                brewPercentageLabel.textContent = progressStart === 0 ? '0% grounded' : 'Brewing...';
+                machineWrapper.classList.add('brewing');
+                brewLoaderOverlay.classList.remove('opacity-0', 'pointer-events-none');
+            }
 
             try {
                 const zip = await JSZip.loadAsync(file);
@@ -720,13 +759,15 @@
                         groundBeansMap[relativePath] = zipEntry;
                         sortedBeanPaths.push(relativePath);
                     }
-                    
-                    const progressPercent = Math.round((currentProcessed / totalEntries) * 100);
-                    brewProgressBar.style.width = `${progressPercent}%`;
-                    carafeFluid.style.height = `${progressPercent}%`;
-                    brewPercentageLabel.textContent = `${progressPercent}% grounded`;
 
-                    if(currentProcessed % 20 === 0) {
+                    // Map processing progress into our slice of the bar (progressStart → 100%)
+                    const localPct = Math.round((currentProcessed / totalEntries) * progressRange);
+                    const totalPct = progressStart + localPct;
+                    brewProgressBar.style.width = `${totalPct}%`;
+                    carafeFluid.style.height = `${totalPct}%`;
+                    brewPercentageLabel.textContent = `${totalPct}% grounded`;
+
+                    if (currentProcessed % 20 === 0) {
                         await new Promise(r => setTimeout(r, 0));
                     }
                 }
